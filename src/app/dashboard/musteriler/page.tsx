@@ -43,6 +43,10 @@ export default async function MusterilerPage({
         select: { amount: true, currency: true, scheduledAt: true, createdAt: true },
         orderBy: [{ scheduledAt: "desc" }, { createdAt: "desc" }],
       },
+      packagePurchases: {
+        where: { isActive: true },
+        select: { remainingHours: true, expiresAt: true },
+      },
     },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
@@ -56,7 +60,11 @@ export default async function MusterilerPage({
     const currency = s.hizmetler[0]?.currency ?? "EUR";
     const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
     const lastService = s.hizmetler[0]?.scheduledAt ?? s.hizmetler[0]?.createdAt;
-    return { ...s, totalCharged, totalPaid, netBalance, currency, symbol, lastService };
+    const now = new Date();
+    const packageHoursLeft = s.packagePurchases
+      .filter((p) => p.remainingHours > 0 && (!p.expiresAt || p.expiresAt > now))
+      .reduce((sum, p) => sum + p.remainingHours, 0);
+    return { ...s, totalCharged, totalPaid, netBalance, currency, symbol, lastService, packageHoursLeft };
   });
 
   const filtered = durum
@@ -166,6 +174,11 @@ export default async function MusterilerPage({
                               <span className="flex items-center gap-1 text-orange-500 text-xs">
                                 <AlertCircle className="w-3 h-3" /> Bekliyor
                               </span>
+                            )}
+                            {student.packageHoursLeft > 0 && (
+                              <Badge variant="outline" className="text-xs bg-violet-100 text-violet-700 border-violet-200">
+                                {student.packageHoursLeft % 1 === 0 ? student.packageHoursLeft : student.packageHoursLeft.toFixed(1)} sa paket
+                              </Badge>
                             )}
                           </div>
                         </td>

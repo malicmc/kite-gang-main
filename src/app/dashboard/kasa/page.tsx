@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { CURRENCY_SYMBOLS, EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/lib/constants";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { tr } from "date-fns/locale";
-import { Wallet, TrendingDown, TrendingUp } from "lucide-react";
+import { Wallet, TrendingDown, TrendingUp, Receipt } from "lucide-react";
+import Link from "next/link";
 import { NewExpenseForm } from "./new-expense-form";
 import { NewAccountForm } from "./new-account-form";
 import { NewGelirForm } from "./new-gelir-form";
@@ -241,6 +242,7 @@ export default async function KasaPage({
                     <th className="text-left px-4 py-2 font-medium text-gray-600">Açıklama</th>
                     <th className="text-left px-4 py-2 font-medium text-gray-600">Yöntem</th>
                     <th className="text-right px-4 py-2 font-medium text-gray-600">Tutar</th>
+                    <th className="text-right px-4 py-2 font-medium text-gray-600 w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -267,6 +269,16 @@ export default async function KasaPage({
                           </div>
                         )}
                       </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <Link
+                          href={`/api/makbuz/${pay.id}`}
+                          target="_blank"
+                          title="Makbuz indir"
+                          className="inline-flex text-gray-400 hover:text-blue-600"
+                        >
+                          <Receipt className="w-4 h-4" />
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -291,6 +303,7 @@ export default async function KasaPage({
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Açıklama</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Yöntem</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Tutar</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600 w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -318,6 +331,7 @@ export default async function KasaPage({
                           <td className="px-4 py-2.5 text-right font-semibold text-red-600">
                             -{formatMoney(e.amount, e.currency)}
                           </td>
+                          <td className="px-4 py-2.5"></td>
                         </tr>
                       );
                     } else {
@@ -347,6 +361,16 @@ export default async function KasaPage({
                                 {formatMoney(p.amount, p.currency)} tahsilat · eğitmen payı düşüldü
                               </div>
                             )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <Link
+                              href={`/api/makbuz/${p.id}`}
+                              target="_blank"
+                              title="Makbuz indir"
+                              className="inline-flex text-gray-400 hover:text-blue-600"
+                            >
+                              <Receipt className="w-4 h-4" />
+                            </Link>
                           </td>
                         </tr>
                       );

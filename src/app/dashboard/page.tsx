@@ -12,6 +12,8 @@ import {
 import { CURRENCY_SYMBOLS, RESERVATION_STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
+import { getWindConditions } from "@/lib/weather";
+import { WindWidget } from "@/components/weather/wind-widget";
 
 function formatMoney(amount: number, currency: string) {
   const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
@@ -26,6 +28,8 @@ export default async function DashboardPage() {
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  const wind = await getWindConditions();
 
   const todayReservations = await prisma.reservation.findMany({
     where: {
@@ -82,7 +86,7 @@ export default async function DashboardPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Bugünkü Gelir — signature hero stat */}
           <div className="relative overflow-hidden rounded-xl p-5 text-white bg-primary">
             <div className="relative flex items-center justify-between mb-4">
@@ -146,6 +150,14 @@ export default async function DashboardPage() {
               <p className="text-sm text-muted-foreground/80">Kasa yok</p>
             )}
           </div>
+
+          <WindWidget wind={wind} />
+        </div>
+      )}
+
+      {!stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <WindWidget wind={wind} />
         </div>
       )}
 

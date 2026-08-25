@@ -97,6 +97,8 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
+    animation: page-fade-in 0.35s ease-out;
   }
   html {
     @apply font-sans;
@@ -107,10 +109,48 @@
   }
 }
 
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Refined text selection */
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
 /* Card styling — crisp border, barely-there shadow */
 [data-slot="card"] {
   border: 1px solid oklch(0.912 0.005 255) !important;
   box-shadow: 0 1px 2px 0 oklch(0.2 0.01 255 / 0.04);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* Elevated surfaces — real depth instead of a flat ring */
+[data-slot="dialog-content"] {
+  box-shadow:
+    0 20px 25px -8px oklch(0.15 0.01 255 / 0.14),
+    0 8px 10px -6px oklch(0.15 0.01 255 / 0.08) !important;
+  border: 1px solid oklch(0.912 0.005 255) !important;
+}
+[data-slot="popover-content"],
+[data-slot="select-content"],
+[data-slot="dropdown-menu-content"] {
+  box-shadow:
+    0 12px 16px -6px oklch(0.15 0.01 255 / 0.10),
+    0 4px 6px -4px oklch(0.15 0.01 255 / 0.06) !important;
+  border: 1px solid oklch(0.912 0.005 255) !important;
+}
+
+/* Buttons — subtle lift on hover for solid CTAs */
+[data-slot="button"] {
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* Table rows — smooth hover, no layout shift */
+[data-slot="table-row"] {
+  transition: background-color 0.1s ease;
 }
 
 /* Scrollbar */

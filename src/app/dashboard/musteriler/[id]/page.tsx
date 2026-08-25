@@ -21,6 +21,8 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  PackageCheck,
+  Receipt,
 } from "lucide-react";
 import { SKILL_LEVELS, LESSON_TYPES, CURRENCY_SYMBOLS, PAYMENT_METHODS } from "@/lib/constants";
 import { format } from "date-fns";
@@ -94,6 +96,11 @@ export default async function MusteriDetailPage({
         payments: {
           orderBy: { recordedAt: "desc" },
           take: 30,
+        },
+        packagePurchases: {
+          where: { isActive: true },
+          include: { package: { select: { name: true } } },
+          orderBy: { purchasedAt: "desc" },
         },
       },
     }),
@@ -322,6 +329,66 @@ export default async function MusteriDetailPage({
             </CardContent>
           </Card>
 
+          {/* Package Hours — only rendered for students who purchased a package */}
+          {student.packagePurchases.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <PackageCheck className="w-4 h-4 text-violet-500" />
+                  Paket Hakları
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="divide-y">
+                  {student.packagePurchases.map((purchase) => {
+                    const now = new Date();
+                    const isExpired = purchase.expiresAt ? purchase.expiresAt < now : false;
+                    const isDepleted = purchase.remainingHours <= 0;
+                    const pct = purchase.totalHours > 0
+                      ? Math.max(0, Math.min(100, (purchase.remainingHours / purchase.totalHours) * 100))
+                      : 0;
+                    const symbol = CURRENCY_SYMBOLS[purchase.currency as keyof typeof CURRENCY_SYMBOLS] ?? purchase.currency;
+
+                    return (
+                      <div key={purchase.id} className="py-3">
+                        <div className="flex items-center justify-between gap-3 mb-1.5">
+                          <p className="text-sm font-medium text-gray-900">{purchase.package.name}</p>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${
+                              isExpired
+                                ? "bg-gray-100 text-gray-500 border-gray-200"
+                                : isDepleted
+                                ? "bg-red-100 text-red-600 border-red-200"
+                                : "bg-violet-100 text-violet-700 border-violet-200"
+                            }`}
+                          >
+                            {isExpired ? "Süresi Doldu" : isDepleted ? "Tükendi" : "Aktif"}
+                          </Badge>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${isExpired || isDepleted ? "bg-gray-300" : "bg-violet-500"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5 text-xs text-gray-500">
+                          <span>
+                            {purchase.remainingHours.toFixed(1)} / {purchase.totalHours.toFixed(1)} saat kaldı
+                          </span>
+                          <span>
+                            {symbol}{purchase.purchasePrice.toFixed(2)}
+                            {purchase.expiresAt && ` · ${format(new Date(purchase.expiresAt), "d MMM yyyy", { locale: tr })}`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Payments */}
           {student.payments.filter(p => p.direction === "INCOMING").length > 0 && (
             <Card>
@@ -348,9 +415,19 @@ export default async function MusteriDetailPage({
                               {pay.description && ` · ${pay.description}`}
                             </p>
                           </div>
-                          <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-200">
-                            {PAYMENT_METHODS[pay.method as keyof typeof PAYMENT_METHODS]}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-200">
+                              {PAYMENT_METHODS[pay.method as keyof typeof PAYMENT_METHODS]}
+                            </Badge>
+                            <Link
+                              href={`/api/makbuz/${pay.id}`}
+                              target="_blank"
+                              title="Makbuz indir"
+                              className="text-gray-400 hover:text-blue-600"
+                            >
+                              <Receipt className="w-4 h-4" />
+                            </Link>
+                          </div>
                         </div>
                       );
                     })}

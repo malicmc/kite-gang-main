@@ -5,12 +5,19 @@ import { Badge } from "@/components/ui/badge";
 import { CURRENCY_SYMBOLS, LESSON_TYPES, RESERVATION_STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
-import { CalendarClock, GraduationCap, Waves } from "lucide-react";
+import { CalendarClock, GraduationCap, Navigation, Waves, Wind } from "lucide-react";
 import { HizmetRowActions } from "../musteriler/[id]/hizmet-row-actions";
 import { OdemeDialog } from "../musteriler/[id]/odeme-dialog";
 import { CheckInButton } from "../operasyon/checkin-button";
 import { CheckOutDialog } from "../operasyon/checkout-dialog";
 import Link from "next/link";
+import { getWindConditions } from "@/lib/weather";
+
+function windSuitability(speedKn: number): { label: string; className: string } {
+  if (speedKn < 10) return { label: "Zayıf", className: "text-gray-600 bg-gray-100" };
+  if (speedKn <= 25) return { label: "İdeal", className: "text-emerald-700 bg-emerald-100" };
+  return { label: "Kuvvetli", className: "text-amber-700 bg-amber-100" };
+}
 
 function formatMoney(amount: number, currency: string) {
   const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
@@ -32,6 +39,7 @@ const HIZMET_STATUS_LABEL: Record<string, string> = {
 
 export default async function BugunPage() {
   const user = await requireAuth();
+  const wind = await getWindConditions();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -103,7 +111,7 @@ export default async function BugunPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <Card>
           <CardContent className="pt-3 pb-3">
             <p className="text-xs text-gray-500">Toplam Seans</p>
@@ -126,6 +134,33 @@ export default async function BugunPage() {
           <CardContent className="pt-3 pb-3">
             <p className="text-xs text-green-700 font-medium">Tamamlandı</p>
             <p className="text-2xl font-bold text-green-800">{totalTamam}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-sky-200 bg-gradient-to-br from-sky-50 to-cyan-50">
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center gap-1 text-xs text-sky-700 font-medium">
+              <Wind className="w-3.5 h-3.5" />
+              Rüzgar
+            </div>
+            {wind ? (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <p className="text-2xl font-bold text-sky-900">{Math.round(wind.windSpeedKn)}</p>
+                  <span className="text-xs text-sky-600">kn</span>
+                  <Navigation
+                    className="w-3.5 h-3.5 text-sky-500 ml-0.5"
+                    style={{ transform: `rotate(${wind.windDirectionDeg + 180}deg)` }}
+                  />
+                </div>
+                <span
+                  className={`inline-block mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${windSuitability(wind.windSpeedKn).className}`}
+                >
+                  {windSuitability(wind.windSpeedKn).label}
+                </span>
+              </>
+            ) : (
+              <p className="text-sm text-sky-400 mt-1">—</p>
+            )}
           </CardContent>
         </Card>
         {user.role !== "INSTRUCTOR" && (
