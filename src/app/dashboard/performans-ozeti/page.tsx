@@ -60,7 +60,7 @@ export default async function PerformansOzetiPage({
     ],
   };
 
-  const [lessons, hizmetler, instructors, kiralamalar, equipmentList] = await Promise.all([
+  const [lessons, hizmetler, instructors, kiralamalar, equipmentList, randevuKiralamalari] = await Promise.all([
     prisma.lesson.findMany({
       where: { checkInTime: { gte: rangeStart, lte: rangeEnd } },
       include: {
@@ -91,6 +91,13 @@ export default async function PerformansOzetiPage({
     prisma.equipment.findMany({
       where: { isActive: true },
       select: { id: true, type: true, name: true, size: true },
+    }),
+    prisma.reservation.findMany({
+      where: { lessonType: "EQUIPMENT_RENTAL", isActive: true, startTime: { gte: rangeStart, lte: rangeEnd } },
+      include: {
+        student: { select: { firstName: true, lastName: true } },
+        equipment: { select: { id: true, type: true, name: true, size: true } },
+      },
     }),
   ]);
 
@@ -181,6 +188,18 @@ export default async function PerformansOzetiPage({
     currency: h.currency,
     earned: h.status === "TAMAMLANDI",
   }));
+
+  for (const r of randevuKiralamalari) {
+    rentals.push({
+      date: r.startTime,
+      equipmentKey: r.equipment?.id ?? UNASSIGNED_KEY,
+      studentName: `${r.student.firstName} ${r.student.lastName}`,
+      title: "Ekipman Kiralama (Randevu)",
+      amount: r.status === "COMPLETED" ? r.rentalAmount ?? 0 : 0,
+      currency: r.rentalCurrency ?? "EUR",
+      earned: r.status === "COMPLETED",
+    });
+  }
 
   rentals.sort((a, b) => b.date.getTime() - a.date.getTime());
 

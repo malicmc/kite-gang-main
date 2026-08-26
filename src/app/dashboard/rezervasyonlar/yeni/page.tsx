@@ -8,7 +8,7 @@ import { ChevronLeft } from "lucide-react";
 export default async function NewReservationPage() {
   await requireAdminOrReception();
 
-  const [students, instructors] = await Promise.all([
+  const [students, instructors, equipment] = await Promise.all([
     prisma.student.findMany({
       where: { isActive: true },
       select: { id: true, firstName: true, lastName: true },
@@ -18,6 +18,11 @@ export default async function NewReservationPage() {
       where: { isActive: true },
       include: { user: { select: { name: true } } },
       orderBy: { user: { name: "asc" } },
+    }),
+    prisma.equipment.findMany({
+      where: { isActive: true, status: { not: "RETIRED" } },
+      select: { id: true, type: true, name: true, size: true },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
     }),
   ]);
 
@@ -31,7 +36,7 @@ export default async function NewReservationPage() {
         </Link>
         <h1 className="text-xl font-bold text-gray-900">Yeni Rezervasyon</h1>
       </div>
-      <NewReservationForm students={students} instructors={instructors} />
+      <NewReservationForm students={students} instructors={instructors} equipment={equipment} />
     </div>
   );
 }

@@ -134,6 +134,10 @@ model Reservation {
   instructorId String
   instructor   Instructor @relation(fields: [instructorId], references: [id])
   lessonType   String   // PRIVATE | SEMI_PRIVATE | GROUP | EQUIPMENT_RENTAL | SUPERVISION
+  equipmentId  String?  // EQUIPMENT_RENTAL: kiralanan ekipman
+  equipment    Equipment? @relation(fields: [equipmentId], references: [id])
+  rentalAmount   Float?  // EQUIPMENT_RENTAL: müşteriden alınan kiralama ücreti
+  rentalCurrency String?
   startTime    DateTime
   endTime      DateTime
   plannedHours Float
@@ -151,6 +155,7 @@ model Reservation {
   @@index([studentId])
   @@index([startTime])
   @@index([status])
+  @@index([equipmentId])
 }
 
 // ─── LESSONS (COMPLETED/IN-PROGRESS) ─────────────────────────────────────────
@@ -326,7 +331,8 @@ model Equipment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  hizmetler Hizmet[]
+  hizmetler    Hizmet[]
+  reservations Reservation[]
 
   @@index([type, status])
 }

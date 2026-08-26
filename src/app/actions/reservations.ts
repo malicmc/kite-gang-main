@@ -17,6 +17,9 @@ const reservationSchema = z.object({
   plannedHours: z.coerce.number().min(0.5).max(24),
   notes: z.string().optional(),
   purchaseId: z.string().optional(),
+  equipmentId: z.string().optional(),
+  rentalAmount: z.coerce.number().min(0).optional(),
+  rentalCurrency: z.enum(["EUR", "USD", "TRY"]).optional(),
 });
 
 export type ReservationFormState = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -35,10 +38,22 @@ export async function createReservation(
     plannedHours: formData.get("plannedHours") as string,
     notes: formData.get("notes") as string || undefined,
     purchaseId: formData.get("purchaseId") as string || undefined,
+    equipmentId: formData.get("equipmentId") as string || undefined,
+    rentalAmount: formData.get("rentalAmount") as string || undefined,
+    rentalCurrency: formData.get("rentalCurrency") as string || undefined,
   };
 
   const parsed = reservationSchema.safeParse(raw);
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+
+  if (parsed.data.lessonType === "EQUIPMENT_RENTAL") {
+    if (!parsed.data.equipmentId) {
+      return { fieldErrors: { equipmentId: ["Kiralanan ekipmanı seçin"] } };
+    }
+    if (parsed.data.rentalAmount === undefined) {
+      return { fieldErrors: { rentalAmount: ["Kiralama ücretini girin"] } };
+    }
+  }
 
   const startTime = new Date(parsed.data.startTime);
   const endTime = new Date(startTime.getTime() + parsed.data.plannedHours * 60 * 60 * 1000);
@@ -69,6 +84,9 @@ export async function createReservation(
       plannedHours: parsed.data.plannedHours,
       notes: parsed.data.notes || null,
       createdById: user.userId,
+      equipmentId: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.equipmentId : null,
+      rentalAmount: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.rentalAmount : null,
+      rentalCurrency: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.rentalCurrency ?? "EUR" : null,
     },
   });
 
