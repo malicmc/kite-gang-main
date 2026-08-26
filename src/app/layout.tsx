@@ -1,18 +1,7 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
-import { Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-
-const geist = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-heading-display",
-  subsets: ["latin"],
-});
+import { headingFont, bodyFont } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: "KiteSurf Okulu Yönetim Sistemi",
@@ -27,7 +16,7 @@ export default function RootLayout({
   return (
     <html
       lang="tr"
-      className={`${geist.variable} ${bricolage.variable} h-full antialiased`}
+      className={`${headingFont.variable} ${bodyFont.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background">
         {children}
