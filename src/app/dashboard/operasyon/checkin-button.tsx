@@ -3,8 +3,6 @@
 import { useState, useActionState, useEffect, useRef } from "react";
 import { checkIn } from "@/app/actions/reservations";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CheckCircle, LogIn } from "lucide-react";
 import { toast } from "sonner";
@@ -41,7 +39,7 @@ export function CheckInButton({ reservationId, purchaseId, plannedHours }: Check
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Check-in — Ekipman Bilgileri</DialogTitle>
+          <DialogTitle>Check-in Onayı</DialogTitle>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="reservationId" value={reservationId} />
@@ -51,38 +49,13 @@ export function CheckInButton({ reservationId, purchaseId, plannedHours }: Check
             <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded">{state.error}</p>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="kiteSize">Uçurtma Boyutu</Label>
-              <Input id="kiteSize" name="kiteSize" placeholder="12m, 9m..." />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="boardType">Tahta Tipi</Label>
-              <Input id="boardType" name="boardType" placeholder="Twin tip, Directional..." />
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="harness" className="w-4 h-4 rounded" />
-              <span className="text-sm">Trapez</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="wetsuit" className="w-4 h-4 rounded" />
-              <span className="text-sm">Wetsuit</span>
-            </label>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="equipmentNotes">Ekipman Notları</Label>
-            <Input id="equipmentNotes" name="equipmentNotes" placeholder="Bar numarası, özel notlar..." />
-          </div>
+          <p className="text-sm text-muted-foreground">Bu rezervasyon için check-in yapmak istediğinize emin misiniz?</p>
 
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>İptal</Button>
             <Button type="submit" disabled={isPending} className="bg-yellow-500 hover:bg-yellow-600">
               <CheckCircle className="w-4 h-4 mr-2" />
-              {isPending ? "İşleniyor..." : "Check-in Yap"}
+              {isPending ? "İşleniyor..." : "Onayla"}
             </Button>
           </div>
         </form>
