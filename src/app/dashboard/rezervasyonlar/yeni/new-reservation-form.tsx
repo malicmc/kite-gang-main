@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StudentSelect } from "@/components/students/student-select";
 import { LESSON_TYPES, CURRENCIES, EQUIPMENT_TYPES } from "@/lib/constants";
+import { useExchangeRates } from "@/hooks/use-exchange-rates";
+import { convertAmount } from "@/lib/currency";
 import { format } from "date-fns";
 
 interface NewReservationFormProps {
@@ -29,9 +31,17 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
   const [studentId, setStudentId] = useState("");
   const [creatingStudent, setCreatingStudent] = useState(false);
   const [lessonType, setLessonType] = useState("PRIVATE");
+  const [rentalAmount, setRentalAmount] = useState("");
   const [rentalCurrency, setRentalCurrency] = useState("EUR");
+  const rates = useExchangeRates();
 
   const fieldErrors = state.fieldErrors ?? {};
+
+  function handleRentalCurrencyChange(next: string) {
+    const converted = convertAmount(Number(rentalAmount) || 0, rentalCurrency, next, rates);
+    if (converted) setRentalAmount(converted.toFixed(2));
+    setRentalCurrency(next);
+  }
 
   return (
     <Card>
@@ -103,6 +113,8 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
                     type="number"
                     step="0.01"
                     min="0"
+                    value={rentalAmount}
+                    onChange={(e) => setRentalAmount(e.target.value)}
                     required
                   />
                   {fieldErrors.rentalAmount && <p className="text-xs text-red-500">{fieldErrors.rentalAmount[0]}</p>}
@@ -113,7 +125,7 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
                     name="rentalCurrency"
                     className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                     value={rentalCurrency}
-                    onChange={(e) => setRentalCurrency(e.target.value)}
+                    onChange={(e) => handleRentalCurrencyChange(e.target.value)}
                   >
                     {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
