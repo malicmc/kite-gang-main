@@ -68,7 +68,7 @@ export default async function MusteriDetailPage({
   await requireAdminOrReception();
   const { id } = await params;
 
-  const [student, sablonlar, instructors] = await Promise.all([
+  const [student, sablonlar, instructors, equipment] = await Promise.all([
     prisma.student.findUnique({
       where: { id, isActive: true },
       include: {
@@ -113,6 +113,11 @@ export default async function MusteriDetailPage({
       where: { isActive: true },
       include: { user: { select: { name: true } } },
       orderBy: { user: { name: "asc" } },
+    }),
+    prisma.equipment.findMany({
+      where: { isActive: true, status: { not: "RETIRED" } },
+      select: { id: true, type: true, name: true, size: true },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
     }),
   ]);
 
@@ -274,6 +279,7 @@ export default async function MusteriDetailPage({
                   studentId={student.id}
                   sablonlar={sablonlar}
                   instructors={instructors}
+                  equipment={equipment}
                 />
               </div>
             </CardHeader>

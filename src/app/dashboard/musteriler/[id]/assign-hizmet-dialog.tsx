@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 import { assignHizmet } from "@/app/actions/hizmetler";
-import { CURRENCIES, PAYMENT_METHODS, ZAMAN_BIRIMLERI, HIZMET_CATEGORIES } from "@/lib/constants";
+import { CURRENCIES, PAYMENT_METHODS, ZAMAN_BIRIMLERI, HIZMET_CATEGORIES, EQUIPMENT_TYPES } from "@/lib/constants";
 import { useExchangeRates } from "@/hooks/use-exchange-rates";
 import { convertAmount } from "@/lib/currency";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ type Sablon = {
   fiyatlar: Fiyat[];
 };
 type Instructor = { id: string; hourlyRate: number | null; hourlyRateCurrency: string; user: { name: string } };
+type EquipmentItem = { id: string; type: string; name: string; size: string | null };
 
 const CAT_LABELS: Record<string, string> = HIZMET_CATEGORIES;
 
@@ -35,10 +36,12 @@ export function AssignHizmetDialog({
   studentId,
   sablonlar,
   instructors,
+  equipment,
 }: {
   studentId: string;
   sablonlar: Sablon[];
   instructors: Instructor[];
+  equipment: EquipmentItem[];
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(assignHizmet, {});
@@ -52,6 +55,7 @@ export function AssignHizmetDialog({
   const [scheduledAt, setScheduledAt] = useState(defaultAt);
   const [instructorId, setInstructorId] = useState("");
   const [instructorEarning, setInstructorEarning] = useState("");
+  const [equipmentId, setEquipmentId] = useState("");
   const [activeFiyatIdx, setActiveFiyatIdx] = useState(0);
   const rates = useExchangeRates();
 
@@ -72,6 +76,7 @@ export function AssignHizmetDialog({
         setQuantity("1");
         setInstructorId("");
         setInstructorEarning("");
+        setEquipmentId("");
         setActiveFiyatIdx(0);
       }
     }
@@ -86,6 +91,7 @@ export function AssignHizmetDialog({
     setQuantity("1");
     setInstructorId("");
     setInstructorEarning("");
+    setEquipmentId("");
     setActiveFiyatIdx(0);
   }
 
@@ -223,6 +229,27 @@ export function AssignHizmetDialog({
                   value={quantity}
                   onChange={(e) => handleQuantityChange(e.target.value)}
                 />
+              </div>
+            )}
+
+            {/* Equipment — only for KIRALAMA */}
+            {selectedSablon.category === "KIRALAMA" && (
+              <div className="space-y-1.5">
+                <Label>Ekipman</Label>
+                <select
+                  name="equipmentId"
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+                  value={equipmentId}
+                  onChange={(e) => setEquipmentId(e.target.value)}
+                >
+                  <option value="">Belirtilmedi</option>
+                  {equipment.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {EQUIPMENT_TYPES[e.type as keyof typeof EQUIPMENT_TYPES] ?? e.type} — {e.name}
+                      {e.size ? ` (${e.size})` : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 

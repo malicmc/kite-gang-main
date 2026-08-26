@@ -76,8 +76,8 @@ const navGroups: NavGroup[] = [
         roles: ["ADMIN", "RECEPTION"],
       },
       {
-        label: "Eğitmen Performansı",
-        href: "/dashboard/egitmen-performans",
+        label: "Performans Özeti",
+        href: "/dashboard/performans-ozeti",
         icon: <BarChart3 className="w-[17px] h-[17px]" />,
         roles: ["ADMIN", "RECEPTION"],
       },

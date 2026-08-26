@@ -19,12 +19,12 @@ export function PeriodNav({
     const d = new Date(date + "T00:00:00");
     d.setDate(d.getDate() + deltaDays);
     const next = d.toISOString().split("T")[0];
-    router.push(`/dashboard/egitmen-performans?period=${period}&date=${next}`);
+    router.push(`/dashboard/performans-ozeti?period=${period}&date=${next}`);
   }
 
   function goToday() {
     const today = new Date().toISOString().split("T")[0];
-    router.push(`/dashboard/egitmen-performans?period=${period}&date=${today}`);
+    router.push(`/dashboard/performans-ozeti?period=${period}&date=${today}`);
   }
 
   return (
