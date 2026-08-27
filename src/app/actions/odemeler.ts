@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminOrReception } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { updateCashAccount } from "./packages";
 
 const odemeSchema = z.object({
   studentId: z.string().min(1),
@@ -12,6 +13,7 @@ const odemeSchema = z.object({
   currency: z.enum(["EUR", "USD", "TRY"]),
   method: z.enum(["CASH", "BANK_TRANSFER", "CREDIT_CARD", "OTHER"]),
   description: z.string().optional(),
+  cashAccountId: z.string().optional(),
 });
 
 export type OdemeFormState = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -28,6 +30,7 @@ export async function recordMusteriOdeme(
     currency: formData.get("currency") as string,
     method: formData.get("method") as string,
     description: formData.get("description") as string || undefined,
+    cashAccountId: formData.get("cashAccountId") as string || undefined,
   };
   const parsed = odemeSchema.safeParse(raw);
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
@@ -44,7 +47,7 @@ export async function recordMusteriOdeme(
     }
   }
 
-  await prisma.payment.create({
+  const payment = await prisma.payment.create({
     data: {
       studentId: parsed.data.studentId,
       hizmetId: parsed.data.hizmetId || null,
@@ -58,6 +61,20 @@ export async function recordMusteriOdeme(
     },
   });
 
+  // Kasaya yalnızca eğitmen hakedişi düşülmüş net tutar yansır.
+  if (parsed.data.cashAccountId) {
+    await updateCashAccount(
+      parsed.data.cashAccountId,
+      kasaAmount,
+      parsed.data.currency,
+      "INCOME",
+      payment.id,
+      null,
+      user.userId,
+      parsed.data.description || "Müşteri ödemesi"
+    );
+  }
+
   revalidatePath(`/dashboard/musteriler/${parsed.data.studentId}`);
   revalidatePath("/dashboard/musteriler");
   revalidatePath("/dashboard/kasa");
@@ -70,6 +87,7 @@ const manuelGelirSchema = z.object({
   currency: z.enum(["EUR", "USD", "TRY"]),
   method: z.enum(["CASH", "BANK_TRANSFER", "CREDIT_CARD", "OTHER"]),
   description: z.string().min(1, "Açıklama gerekli"),
+  cashAccountId: z.string().optional(),
 });
 
 export async function recordManuelGelir(
@@ -82,11 +100,12 @@ export async function recordManuelGelir(
     currency: formData.get("currency") as string,
     method: formData.get("method") as string,
     description: formData.get("description") as string,
+    cashAccountId: formData.get("cashAccountId") as string || undefined,
   };
   const parsed = manuelGelirSchema.safeParse(raw);
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
 
-  await prisma.payment.create({
+  const payment = await prisma.payment.create({
     data: {
       amount: parsed.data.amount,
       currency: parsed.data.currency,
@@ -96,6 +115,19 @@ export async function recordManuelGelir(
       recordedById: user.userId,
     },
   });
+
+  if (parsed.data.cashAccountId) {
+    await updateCashAccount(
+      parsed.data.cashAccountId,
+      parsed.data.amount,
+      parsed.data.currency,
+      "INCOME",
+      payment.id,
+      null,
+      user.userId,
+      parsed.data.description
+    );
+  }
 
   revalidatePath("/dashboard/kasa");
   return {};

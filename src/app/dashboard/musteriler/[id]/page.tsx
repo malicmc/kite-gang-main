@@ -68,7 +68,7 @@ export default async function MusteriDetailPage({
   await requireAdminOrReception();
   const { id } = await params;
 
-  const [student, sablonlar, instructors, equipment] = await Promise.all([
+  const [student, sablonlar, instructors, equipment, cashAccounts] = await Promise.all([
     prisma.student.findUnique({
       where: { id, isActive: true },
       include: {
@@ -121,6 +121,10 @@ export default async function MusteriDetailPage({
       where: { isActive: true, status: { not: "RETIRED" } },
       select: { id: true, type: true, name: true, size: true },
       orderBy: [{ type: "asc" }, { name: "asc" }],
+    }),
+    prisma.cashAccount.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -180,7 +184,7 @@ export default async function MusteriDetailPage({
             )}
           </div>
         </div>
-        <OdemeDialog studentId={student.id} hizmetler={hizmetOptions} />
+        <OdemeDialog studentId={student.id} hizmetler={hizmetOptions} cashAccounts={cashAccounts} />
       </div>
 
       {/* Financial Summary */}

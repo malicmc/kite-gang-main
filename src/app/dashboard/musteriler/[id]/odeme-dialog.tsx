@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useExchangeRates } from "@/hooks/use-exchange-rates";
 import { convertAmount } from "@/lib/currency";
+import type { CashAccount } from "@/generated/prisma/client";
 
 type HizmetOption = {
   id: string;
@@ -27,7 +28,15 @@ function formatMoney(amount: number, currency: string) {
   return `${symbol}${amount.toFixed(2)}`;
 }
 
-export function OdemeDialog({ studentId, hizmetler = [] }: { studentId: string; hizmetler?: HizmetOption[] }) {
+export function OdemeDialog({
+  studentId,
+  hizmetler = [],
+  cashAccounts = [],
+}: {
+  studentId: string;
+  hizmetler?: HizmetOption[];
+  cashAccounts?: CashAccount[];
+}) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(recordMusteriOdeme, {});
   const prevRef = useRef(false);
@@ -133,6 +142,20 @@ export function OdemeDialog({ studentId, hizmetler = [] }: { studentId: string; 
               ))}
             </select>
           </div>
+
+          {cashAccounts.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Kasa Hesabı</Label>
+              <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
+                <option value="">Kasa güncellenmesin</option>
+                {cashAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.currency})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Açıklama</Label>

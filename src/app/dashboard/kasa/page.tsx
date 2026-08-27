@@ -90,7 +90,7 @@ export default async function KasaPage({
         <h1 className="text-2xl font-bold text-gray-900">Kasa & Muhasebe</h1>
         <div className="flex gap-2">
           <NewAccountForm />
-          <NewGelirForm />
+          <NewGelirForm cashAccounts={cashAccounts} />
           <NewExpenseForm cashAccounts={cashAccounts} />
         </div>
       </div>

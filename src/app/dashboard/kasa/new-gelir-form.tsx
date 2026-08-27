@@ -13,7 +13,9 @@ import { useRouter } from "next/navigation";
 import { useExchangeRates } from "@/hooks/use-exchange-rates";
 import { convertAmount } from "@/lib/currency";
 
-export function NewGelirForm() {
+type CashAccountOption = { id: string; name: string; currency: string; balance: number };
+
+export function NewGelirForm({ cashAccounts = [] }: { cashAccounts?: CashAccountOption[] }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(recordManuelGelir, {});
   const prevRef = useRef(false);
@@ -80,6 +82,20 @@ export function NewGelirForm() {
               ))}
             </select>
           </div>
+
+          {cashAccounts.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Kasa Hesabı</Label>
+              <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
+                <option value="">Kasa güncellenmesin</option>
+                {cashAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.currency})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>İptal</Button>
