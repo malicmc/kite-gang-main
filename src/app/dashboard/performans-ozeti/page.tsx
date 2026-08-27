@@ -16,7 +16,7 @@ function formatMoney(amount: number, currency: string) {
 
 type Session = {
   date: Date;
-  instructorId: string;
+  instructorId: string | null;
   studentName: string;
   title: string;
   amount: number;
@@ -106,6 +106,7 @@ export default async function PerformansOzetiPage({
   const sessions: Session[] = [];
 
   for (const l of lessons) {
+    if (!l.instructor) continue;
     sessions.push({
       date: l.checkInTime,
       instructorId: l.instructorId,
@@ -160,6 +161,7 @@ export default async function PerformansOzetiPage({
   const grandEarnings: Record<string, number> = {};
 
   for (const s of sessions) {
+    if (!s.instructorId) continue;
     const stat = byInstructor.get(s.instructorId);
     if (!stat) continue;
     stat.sessions.push(s);

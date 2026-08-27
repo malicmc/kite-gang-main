@@ -192,14 +192,14 @@ export default async function DashboardPage() {
               <div key={res.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/50 transition-colors">
                 <div
                   className="w-1 h-10 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: res.instructor.color }}
+                  style={{ backgroundColor: res.instructor?.color ?? "#9CA3AF" }}
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground">
                     {res.student.firstName} {res.student.lastName}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {res.instructor.user.name}
+                    {res.instructor?.user.name ?? "Personel atanmadı"}
                     <span className="mx-1.5 text-muted-foreground/40">·</span>
                     {format(new Date(res.startTime), "HH:mm")}
                     {" – "}

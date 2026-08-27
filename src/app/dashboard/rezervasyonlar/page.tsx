@@ -126,7 +126,7 @@ export default async function ReservationsPage({
                           <div className="flex items-center gap-2">
                             <div
                               className="w-2 h-2 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: res.instructor.color }}
+                              style={{ backgroundColor: res.instructor?.color ?? "#9CA3AF" }}
                             />
                             <div>
                               <div className="font-medium text-gray-900">
@@ -149,7 +149,7 @@ export default async function ReservationsPage({
                             <div className="text-xs text-gray-400">Paket Kullanıldı</div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-gray-600">{res.instructor.user.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{res.instructor?.user.name ?? "—"}</td>
                         <td className="px-4 py-3">
                           {["CANCELLED", "NO_SHOW", "WIND_CANCELLED"].includes(res.status) ? (
                             <Badge variant="outline" className={`text-xs ${

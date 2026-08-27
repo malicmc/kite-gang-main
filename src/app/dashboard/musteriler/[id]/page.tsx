@@ -24,7 +24,7 @@ import {
   PackageCheck,
   Receipt,
 } from "lucide-react";
-import { SKILL_LEVELS, LESSON_TYPES, CURRENCY_SYMBOLS, PAYMENT_METHODS } from "@/lib/constants";
+import { SKILL_LEVELS, LESSON_TYPES, CURRENCY_SYMBOLS, PAYMENT_METHODS, EQUIPMENT_TYPES } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { StudentEditForm } from "./edit-form";
@@ -89,7 +89,10 @@ export default async function MusteriDetailPage({
         },
         reservations: {
           where: { isActive: true, lessonType: "EQUIPMENT_RENTAL" },
-          include: { instructor: { include: { user: true } } },
+          include: {
+            instructor: { include: { user: true } },
+            equipment: { select: { type: true, name: true, size: true } },
+          },
           orderBy: { startTime: "desc" },
           take: 10,
         },
@@ -458,7 +461,7 @@ export default async function MusteriDetailPage({
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            {lesson.instructor.user.name}
+                            {lesson.instructor?.user.name ?? "Personel atanmadı"}
                           </p>
                           <p className="text-xs text-gray-500 mt-0.5">
                             {LESSON_TYPES[lesson.reservation.lessonType as keyof typeof LESSON_TYPES]}
@@ -499,10 +502,20 @@ export default async function MusteriDetailPage({
                   {student.reservations.map((res) => (
                     <div key={res.id} className="py-3 flex justify-between items-center">
                       <div>
-                        <p className="text-sm font-medium">{res.instructor.user.name}</p>
+                        <p className="text-sm font-medium">
+                          {res.equipment
+                            ? `${EQUIPMENT_TYPES[res.equipment.type as keyof typeof EQUIPMENT_TYPES] ?? res.equipment.type} — ${res.equipment.name}${res.equipment.size ? ` (${res.equipment.size})` : ""}`
+                            : "Ekipman Kiralama"}
+                          {res.rentalAmount != null && (
+                            <span className="text-gray-500 font-normal">
+                              {" · "}{CURRENCY_SYMBOLS[res.rentalCurrency as keyof typeof CURRENCY_SYMBOLS] ?? res.rentalCurrency}{res.rentalAmount.toFixed(2)}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs text-gray-500 mt-0.5">
                           {format(new Date(res.startTime), "d MMM yyyy HH:mm", { locale: tr })}
                           {" · "}{res.plannedHours} saat
+                          {res.instructor && ` · ${res.instructor.user.name}`}
                         </p>
                       </div>
                       <Badge variant="outline" className={

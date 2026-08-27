@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { createReservation } from "@/app/actions/reservations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,17 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
   const [rentalCurrency, setRentalCurrency] = useState("EUR");
   const rates = useExchangeRates();
 
+  // React 19's <form action> native-resets uncontrolled <select> DOM after every
+  // submit attempt (success or fieldErrors), desyncing it from our own state.
+  // Remounting on each action response re-syncs the select to the real value.
+  const prevStateRef = useRef(state);
+  const formGenRef = useRef(0);
+  if (prevStateRef.current !== state) {
+    prevStateRef.current = state;
+    formGenRef.current += 1;
+  }
+  const formGen = formGenRef.current;
+
   const fieldErrors = state.fieldErrors ?? {};
 
   function handleRentalCurrencyChange(next: string) {
@@ -55,6 +66,7 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
           )}
 
           <StudentSelect
+            key={formGen}
             students={students}
             value={studentId}
             onChange={setStudentId}
@@ -63,21 +75,9 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
           {fieldErrors.studentId && <p className="text-xs text-red-500">{fieldErrors.studentId[0]}</p>}
 
           <div className="space-y-1.5">
-            <Label>Eğitmen *</Label>
-            <select name="instructorId" className="w-full border rounded-md px-3 py-2 text-sm bg-white" required>
-              <option value="">Eğitmen seçin...</option>
-              {instructors.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.user.name}
-                </option>
-              ))}
-            </select>
-            {fieldErrors.instructorId && <p className="text-xs text-red-500">{fieldErrors.instructorId[0]}</p>}
-          </div>
-
-          <div className="space-y-1.5">
             <Label>Ders Tipi *</Label>
             <select
+              key={formGen}
               name="lessonType"
               className="w-full border rounded-md px-3 py-2 text-sm bg-white"
               value={lessonType}
@@ -89,6 +89,21 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
               ))}
             </select>
           </div>
+
+          {lessonType !== "EQUIPMENT_RENTAL" && (
+            <div className="space-y-1.5">
+              <Label>Eğitmen *</Label>
+              <select name="instructorId" className="w-full border rounded-md px-3 py-2 text-sm bg-white" required>
+                <option value="">Eğitmen seçin...</option>
+                {instructors.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.user.name}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.instructorId && <p className="text-xs text-red-500">{fieldErrors.instructorId[0]}</p>}
+            </div>
+          )}
 
           {lessonType === "EQUIPMENT_RENTAL" && (
             <div className="space-y-3 border rounded-md p-3 bg-gray-50">

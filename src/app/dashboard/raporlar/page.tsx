@@ -349,6 +349,7 @@ export default async function ReportsPage({
                   {(() => {
                     const byInstructor: Record<string, { name: string; count: number; hours: number; students: Set<string> }> = {};
                     for (const l of lessons) {
+                      if (!l.instructor || !l.instructorId) continue;
                       const name = l.instructor.user.name;
                       if (!byInstructor[l.instructorId]) {
                         byInstructor[l.instructorId] = { name, count: 0, hours: 0, students: new Set() };

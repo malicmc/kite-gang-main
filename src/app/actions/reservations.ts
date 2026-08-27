@@ -11,7 +11,7 @@ const VALID_STATUSES = ["PLANNED", "CHECKED_IN", "COMPLETED", "CANCELLED", "NO_S
 
 const reservationSchema = z.object({
   studentId: z.string().min(1, "Öğrenci seçin"),
-  instructorId: z.string().min(1, "Eğitmen seçin"),
+  instructorId: z.string().optional(),
   lessonType: z.enum(["PRIVATE", "SEMI_PRIVATE", "GROUP", "EQUIPMENT_RENTAL", "SUPERVISION"]),
   startTime: z.string().min(1, "Başlangıç zamanı gerekli"),
   plannedHours: z.coerce.number().min(0.5).max(24),
@@ -32,7 +32,7 @@ export async function createReservation(
 
   const raw = {
     studentId: formData.get("studentId") as string,
-    instructorId: formData.get("instructorId") as string,
+    instructorId: (formData.get("instructorId") as string) || undefined,
     lessonType: formData.get("lessonType") as string,
     startTime: formData.get("startTime") as string,
     plannedHours: formData.get("plannedHours") as string,
@@ -53,31 +53,35 @@ export async function createReservation(
     if (parsed.data.rentalAmount === undefined) {
       return { fieldErrors: { rentalAmount: ["Kiralama ücretini girin"] } };
     }
+  } else if (!parsed.data.instructorId) {
+    return { fieldErrors: { instructorId: ["Eğitmen seçin"] } };
   }
 
   const startTime = new Date(parsed.data.startTime);
   const endTime = new Date(startTime.getTime() + parsed.data.plannedHours * 60 * 60 * 1000);
 
-  // Check instructor availability
-  const conflict = await prisma.reservation.findFirst({
-    where: {
-      instructorId: parsed.data.instructorId,
-      isActive: true,
-      status: { notIn: ["CANCELLED", "NO_SHOW", "WIND_CANCELLED"] },
-      OR: [
-        { startTime: { lt: endTime }, endTime: { gt: startTime } },
-      ],
-    },
-  });
+  // Check instructor availability — sadece bir eğitmen seçildiyse anlamlı
+  if (parsed.data.instructorId) {
+    const conflict = await prisma.reservation.findFirst({
+      where: {
+        instructorId: parsed.data.instructorId,
+        isActive: true,
+        status: { notIn: ["CANCELLED", "NO_SHOW", "WIND_CANCELLED"] },
+        OR: [
+          { startTime: { lt: endTime }, endTime: { gt: startTime } },
+        ],
+      },
+    });
 
-  if (conflict) {
-    return { error: "Bu eğitmen seçilen saatte başka bir derse atanmış. Lütfen farklı bir saat veya eğitmen seçin." };
+    if (conflict) {
+      return { error: "Bu eğitmen seçilen saatte başka bir derse atanmış. Lütfen farklı bir saat veya eğitmen seçin." };
+    }
   }
 
   const reservation = await prisma.reservation.create({
     data: {
       studentId: parsed.data.studentId,
-      instructorId: parsed.data.instructorId,
+      instructorId: parsed.data.instructorId || null,
       lessonType: parsed.data.lessonType,
       startTime,
       endTime,
@@ -120,7 +124,7 @@ export async function updateReservationStatus(
       where: { id: reservationId },
       include: { instructor: true },
     });
-    if (!reservation || reservation.instructor.userId !== user.userId) {
+    if (!reservation || !reservation.instructor || reservation.instructor.userId !== user.userId) {
       return { error: "Yetkisiz işlem" };
     }
   }
@@ -209,7 +213,7 @@ export async function checkIn(
   if (reservation.status !== "PLANNED") return { error: "Bu rezervasyon check-in için uygun değil" };
 
   // INSTRUCTOR yalnızca kendi dersine check-in yapabilir
-  if (user.role === "INSTRUCTOR" && reservation.instructor.userId !== user.userId) {
+  if (user.role === "INSTRUCTOR" && (!reservation.instructor || reservation.instructor.userId !== user.userId)) {
     return { error: "Bu rezervasyon size ait değil" };
   }
 
@@ -275,25 +279,27 @@ export async function checkOut(
   if (lesson.checkOutTime) return { error: "Bu ders zaten tamamlandı" };
 
   // INSTRUCTOR yalnızca kendi dersine check-out yapabilir
-  if (user.role === "INSTRUCTOR" && lesson.instructor.userId !== user.userId) {
+  if (user.role === "INSTRUCTOR" && (!lesson.instructor || lesson.instructor.userId !== user.userId)) {
     return { error: "Bu ders size ait değil" };
   }
 
-  // Calculate instructor earning
+  // Calculate instructor earning — eğitmensiz kiralamalarda hakediş yok
   const instructor = lesson.instructor;
   let earningAmount = 0;
   let earningCurrency = "EUR";
 
-  if (instructor.paymentModel === "HOURLY_RATE" && instructor.hourlyRate) {
-    earningAmount = actualHours * instructor.hourlyRate;
-    earningCurrency = instructor.hourlyRateCurrency ?? "EUR";
-  } else if (instructor.paymentModel === "REVENUE_SHARE" && instructor.revenueShare) {
-    if (lesson.purchaseId) {
-      const purchase = await prisma.packagePurchase.findUnique({ where: { id: lesson.purchaseId } });
-      if (purchase) {
-        const hourlyRate = purchase.purchasePrice / purchase.totalHours;
-        earningAmount = (actualHours * hourlyRate * instructor.revenueShare) / 100;
-        earningCurrency = purchase.currency;
+  if (instructor) {
+    if (instructor.paymentModel === "HOURLY_RATE" && instructor.hourlyRate) {
+      earningAmount = actualHours * instructor.hourlyRate;
+      earningCurrency = instructor.hourlyRateCurrency ?? "EUR";
+    } else if (instructor.paymentModel === "REVENUE_SHARE" && instructor.revenueShare) {
+      if (lesson.purchaseId) {
+        const purchase = await prisma.packagePurchase.findUnique({ where: { id: lesson.purchaseId } });
+        if (purchase) {
+          const hourlyRate = purchase.purchasePrice / purchase.totalHours;
+          earningAmount = (actualHours * hourlyRate * instructor.revenueShare) / 100;
+          earningCurrency = purchase.currency;
+        }
       }
     }
   }
@@ -312,16 +318,18 @@ export async function checkOut(
         where: { id: lesson.reservationId },
         data: { status: "COMPLETED" },
       });
-      await tx.instructorEarning.create({
-        data: {
-          instructorId: lesson.instructorId,
-          lessonId,
-          amount: earningAmount,
-          currency: earningCurrency,
-          hours: actualHours,
-          isPaid: false,
-        },
-      });
+      if (lesson.instructorId) {
+        await tx.instructorEarning.create({
+          data: {
+            instructorId: lesson.instructorId,
+            lessonId,
+            amount: earningAmount,
+            currency: earningCurrency,
+            hours: actualHours,
+            isPaid: false,
+          },
+        });
+      }
       if (lesson.purchaseId) {
         // Kalan saatin negatife düşmesini engelle
         const purchase = await tx.packagePurchase.findUnique({ where: { id: lesson.purchaseId } });

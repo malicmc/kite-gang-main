@@ -166,14 +166,14 @@ function ReservationCard({
             <div className="flex items-center gap-2">
               <div
                 className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: res.instructor.color }}
+                style={{ backgroundColor: res.instructor?.color ?? "#9CA3AF" }}
               />
               <p className="font-semibold text-gray-900">
                 {res.student.firstName} {res.student.lastName}
               </p>
             </div>
             <p className="text-xs text-gray-500 mt-0.5 ml-4">
-              {res.instructor.user.name}
+              {res.instructor?.user.name ?? "Personel atanmadı"}
             </p>
           </div>
           <Badge className={STATUS_COLORS[res.status]}>
