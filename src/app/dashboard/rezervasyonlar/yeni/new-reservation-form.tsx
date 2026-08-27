@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useState } from "react";
 import { createReservation } from "@/app/actions/reservations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,13 +38,12 @@ export function NewReservationForm({ students, instructors, equipment }: NewRese
   // React 19's <form action> native-resets uncontrolled <select> DOM after every
   // submit attempt (success or fieldErrors), desyncing it from our own state.
   // Remounting on each action response re-syncs the select to the real value.
-  const prevStateRef = useRef(state);
-  const formGenRef = useRef(0);
-  if (prevStateRef.current !== state) {
-    prevStateRef.current = state;
-    formGenRef.current += 1;
+  const [prevState, setPrevState] = useState(state);
+  const [formGen, setFormGen] = useState(0);
+  if (prevState !== state) {
+    setPrevState(state);
+    setFormGen((g) => g + 1);
   }
-  const formGen = formGenRef.current;
 
   const fieldErrors = state.fieldErrors ?? {};
 
