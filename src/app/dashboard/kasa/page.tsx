@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CURRENCY_SYMBOLS, EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/lib/constants";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { tr } from "date-fns/locale";
-import { Wallet, TrendingDown, TrendingUp, Receipt } from "lucide-react";
-import Link from "next/link";
+import { Wallet, TrendingDown, TrendingUp } from "lucide-react";
 import { NewExpenseForm } from "./new-expense-form";
 import { NewAccountForm } from "./new-account-form";
 import { NewGelirForm } from "./new-gelir-form";
@@ -37,7 +36,7 @@ export default async function KasaPage({
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
 
-  const [cashAccounts, recentExpenses, recentPayments, monthlyIncome, monthlyExpense] = await Promise.all([
+  const [cashAccounts, recentExpenses, recentPayments, recentPayouts, monthlyIncome, monthlyExpense, monthlyPayouts] = await Promise.all([
     prisma.cashAccount.findMany({
       where: { isActive: true },
       include: { _count: { select: { entries: true } } },
@@ -54,6 +53,13 @@ export default async function KasaPage({
       orderBy: { recordedAt: "desc" },
       take: 50,
     }),
+    // Sadece bir kasa hesabından fiilen düşülmüş hakediş ödemeleri — gerçek nakit çıkışı olanlar
+    prisma.instructorPayout.findMany({
+      where: { cashRegisterEntry: { isNot: null } },
+      include: { instructor: { include: { user: { select: { name: true } } } } },
+      orderBy: { paidAt: "desc" },
+      take: 50,
+    }),
     prisma.payment.findMany({
       where: { direction: "INCOMING", recordedAt: { gte: monthStart, lte: monthEnd } },
       select: { amount: true, kasaAmount: true },
@@ -61,6 +67,12 @@ export default async function KasaPage({
     prisma.expense.aggregate({
       where: { isActive: true, expenseDate: { gte: monthStart, lte: monthEnd } },
       _sum: { amount: true },
+      _count: true,
+    }),
+    prisma.instructorPayout.aggregate({
+      where: { cashRegisterEntry: { isNot: null }, paidAt: { gte: monthStart, lte: monthEnd } },
+      _sum: { amount: true },
+      _count: true,
     }),
   ]);
 
@@ -72,13 +84,15 @@ export default async function KasaPage({
   }
 
   const thisMonthIncome = monthlyIncome.reduce((sum, p) => sum + (p.kasaAmount ?? p.amount), 0);
-  const thisMonthExpense = monthlyExpense._sum.amount ?? 0;
+  const thisMonthExpense = (monthlyExpense._sum.amount ?? 0) + (monthlyPayouts._sum.amount ?? 0);
+  const thisMonthExpenseCount = monthlyExpense._count + monthlyPayouts._count;
   const thisMonthNet = thisMonthIncome - thisMonthExpense;
 
   // Build combined + indexed transactions list
   const allTransactions = [
     ...recentExpenses.map((e, i) => ({ type: "expense" as const, date: new Date(e.expenseDate), item: e, idx: i })),
     ...recentPayments.map((p, i) => ({ type: "payment" as const, date: new Date(p.recordedAt), item: p, idx: i })),
+    ...recentPayouts.map((p, i) => ({ type: "payout" as const, date: new Date(p.paidAt), item: p, idx: i })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   // Give sequential display IDs from newest to oldest
@@ -112,7 +126,7 @@ export default async function KasaPage({
               <TrendingDown className="w-3.5 h-3.5" /> Bu Ay Gider
             </div>
             <p className="text-2xl font-bold text-red-700">{formatMoney(thisMonthExpense, "EUR")}</p>
-            <p className="text-xs text-red-600 mt-0.5">{recentExpenses.length} gider kalemi</p>
+            <p className="text-xs text-red-600 mt-0.5">{thisMonthExpenseCount} gider kalemi</p>
           </CardContent>
         </Card>
         <Card className={thisMonthNet >= 0 ? "border-blue-200 bg-blue-50" : "border-red-200 bg-red-50"}>
@@ -242,7 +256,6 @@ export default async function KasaPage({
                     <th className="text-left px-4 py-2 font-medium text-gray-600">Açıklama</th>
                     <th className="text-left px-4 py-2 font-medium text-gray-600">Yöntem</th>
                     <th className="text-right px-4 py-2 font-medium text-gray-600">Tutar</th>
-                    <th className="text-right px-4 py-2 font-medium text-gray-600 w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -269,16 +282,6 @@ export default async function KasaPage({
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <Link
-                          href={`/api/makbuz/${pay.id}`}
-                          target="_blank"
-                          title="Makbuz indir"
-                          className="inline-flex text-gray-400 hover:text-blue-600"
-                        >
-                          <Receipt className="w-4 h-4" />
-                        </Link>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -303,7 +306,6 @@ export default async function KasaPage({
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Açıklama</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Yöntem</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Tutar</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600 w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -331,10 +333,9 @@ export default async function KasaPage({
                           <td className="px-4 py-2.5 text-right font-semibold text-red-600">
                             -{formatMoney(e.amount, e.currency)}
                           </td>
-                          <td className="px-4 py-2.5"></td>
                         </tr>
                       );
-                    } else {
+                    } else if (entry.type === "payment") {
                       const p = entry.item as typeof recentPayments[0];
                       return (
                         <tr key={`p-${p.id}`} className="hover:bg-gray-50">
@@ -362,15 +363,28 @@ export default async function KasaPage({
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <Link
-                              href={`/api/makbuz/${p.id}`}
-                              target="_blank"
-                              title="Makbuz indir"
-                              className="inline-flex text-gray-400 hover:text-blue-600"
-                            >
-                              <Receipt className="w-4 h-4" />
-                            </Link>
+                        </tr>
+                      );
+                    } else {
+                      const p = entry.item as typeof recentPayouts[0];
+                      return (
+                        <tr key={`o-${p.id}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-gray-400 text-xs">{entry.displayId}</td>
+                          <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
+                            {format(new Date(p.paidAt), "d MMM yyyy", { locale: tr })}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-200 text-xs">Hakediş</Badge>
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-gray-900">{p.instructor.user.name}</td>
+                          <td className="px-4 py-2.5 text-gray-600">{p.notes ?? "Hakediş ödemesi"}</td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant="outline" className={`text-xs ${METHOD_BADGE[p.method] ?? ""}`}>
+                              {PAYMENT_METHODS[p.method as keyof typeof PAYMENT_METHODS]}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-red-600">
+                            -{formatMoney(p.amount, p.currency)}
                           </td>
                         </tr>
                       );

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { updateCashAccount } from "./packages";
 
 const instructorSchema = z.object({
   name: z.string().min(1, "Ad zorunlu"),
@@ -163,8 +164,17 @@ export async function recordInstructorPayout(
   const notes = formData.get("notes") as string;
   const periodStart = formData.get("periodStart") as string;
   const periodEnd = formData.get("periodEnd") as string;
+  const cashAccountId = (formData.get("cashAccountId") as string) || undefined;
 
   if (!amount || amount <= 0) return { error: "Geçerli tutar girin" };
+
+  if (cashAccountId) {
+    const account = await prisma.cashAccount.findUnique({ where: { id: cashAccountId } });
+    if (!account) return { error: "Kasa hesabı bulunamadı" };
+    if (account.balance < amount) {
+      return { error: `Kasa bakiyesi yetersiz. Mevcut: ${account.balance.toFixed(2)} ${account.currency}` };
+    }
+  }
 
   // Mark earnings as paid
   const unpaidEarnings = await prisma.instructorEarning.findMany({
@@ -175,8 +185,13 @@ export async function recordInstructorPayout(
     },
   });
 
-  await prisma.$transaction([
-    prisma.instructorPayout.create({
+  const instructor = await prisma.instructor.findUnique({
+    where: { id: instructorId },
+    select: { user: { select: { name: true } } },
+  });
+
+  const payout = await prisma.$transaction(async (tx) => {
+    const created = await tx.instructorPayout.create({
       data: {
         instructorId,
         amount,
@@ -187,12 +202,31 @@ export async function recordInstructorPayout(
         periodEnd: periodEnd ? new Date(periodEnd) : null,
         recordedById: user.userId,
       },
-    }),
-    ...unpaidEarnings.map((e) =>
-      prisma.instructorEarning.update({ where: { id: e.id }, data: { isPaid: true } })
-    ),
-  ]);
+    });
+    await Promise.all(
+      unpaidEarnings.map((e) =>
+        tx.instructorEarning.update({ where: { id: e.id }, data: { isPaid: true } })
+      )
+    );
+    return created;
+  });
+
+  // Kasadan gerçekten para çıktığı için hakediş ödemesi de bir kasa hareketi olarak işlenir.
+  if (cashAccountId) {
+    await updateCashAccount(
+      cashAccountId,
+      amount,
+      currency,
+      "EXPENSE",
+      null,
+      null,
+      user.userId,
+      `Hakediş ödemesi · ${instructor?.user.name ?? "Eğitmen"}`,
+      payout.id
+    );
+  }
 
   revalidatePath(`/dashboard/egitmenler/${instructorId}`);
+  revalidatePath("/dashboard/kasa");
   return {};
 }

@@ -13,9 +13,10 @@ import { useEffect } from "react";
 interface PayoutFormProps {
   instructorId: string;
   currencies: string[];
+  cashAccounts: { id: string; name: string; currency: string; balance: number }[];
 }
 
-export function PayoutForm({ instructorId, currencies }: PayoutFormProps) {
+export function PayoutForm({ instructorId, currencies, cashAccounts }: PayoutFormProps) {
   const [state, formAction, isPending] = useActionState(recordInstructorPayout, {});
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function PayoutForm({ instructorId, currencies }: PayoutFormProps) {
         <CardTitle className="text-base text-orange-800">Hakediş Ödemesi Yap</CardTitle>
       </CardHeader>
       <CardContent>
-        <form action={formAction} className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+        <form action={formAction} className="grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
           <input type="hidden" name="instructorId" value={instructorId} />
           {state.error && <p className="col-span-full text-sm text-red-500">{state.error}</p>}
           <div className="space-y-1.5">
@@ -51,6 +52,19 @@ export function PayoutForm({ instructorId, currencies }: PayoutFormProps) {
               ))}
             </select>
           </div>
+          {cashAccounts.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Kasadan Düş</Label>
+              <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
+                <option value="">Kasa güncellenmesi (yok)</option>
+                {cashAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} (Bakiye: {acc.balance.toFixed(2)} {acc.currency})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <Button type="submit" disabled={isPending} className="bg-orange-600 hover:bg-orange-700">
             {isPending ? "..." : "Ödeme Kaydet"}
           </Button>

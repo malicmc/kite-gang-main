@@ -239,7 +239,8 @@ async function updateCashAccount(
   paymentId: string | null,
   expenseId: string | null,
   userId: string,
-  description: string
+  description: string,
+  payoutId: string | null = null
 ) {
   const account = await prisma.cashAccount.findUnique({ where: { id: accountId } });
   if (!account) return;
@@ -262,6 +263,7 @@ async function updateCashAccount(
         description,
         paymentId,
         expenseId,
+        payoutId,
         recordedById: userId,
       },
     }),

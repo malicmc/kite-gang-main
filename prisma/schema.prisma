@@ -277,6 +277,8 @@ model InstructorPayout {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  cashRegisterEntry CashRegisterEntry?
+
   @@index([instructorId])
 }
 
@@ -309,6 +311,8 @@ model CashRegisterEntry {
   payment      Payment?    @relation(fields: [paymentId], references: [id])
   expenseId    String?     @unique
   expense      Expense?    @relation(fields: [expenseId], references: [id])
+  payoutId     String?     @unique
+  payout       InstructorPayout? @relation(fields: [payoutId], references: [id])
   recordedById String?
   recordedAt   DateTime    @default(now())
   createdAt    DateTime    @default(now())

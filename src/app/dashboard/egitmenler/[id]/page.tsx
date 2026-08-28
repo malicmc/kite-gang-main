@@ -31,7 +31,7 @@ export default async function InstructorDetailPage({
     notFound();
   }
 
-  const [instructor, egitimSablonlar, students] = await Promise.all([
+  const [instructor, egitimSablonlar, students, cashAccounts] = await Promise.all([
     prisma.instructor.findUnique({
       where: { id, isActive: true },
       include: {
@@ -71,6 +71,13 @@ export default async function InstructorDetailPage({
       select: { id: true, firstName: true, lastName: true },
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     }),
+    user.role === "ADMIN"
+      ? prisma.cashAccount.findMany({
+          where: { isActive: true },
+          select: { id: true, name: true, currency: true, balance: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   if (!instructor) notFound();
@@ -214,6 +221,7 @@ export default async function InstructorDetailPage({
         <PayoutForm
           instructorId={id}
           currencies={[...new Set([...Object.keys(earningsByCurrency), ...Object.keys(hizmetEarningByCurrency)])]}
+          cashAccounts={cashAccounts}
         />
       )}
 

@@ -22,7 +22,6 @@ import {
   TrendingUp,
   Wallet,
   PackageCheck,
-  Receipt,
 } from "lucide-react";
 import { SKILL_LEVELS, LESSON_TYPES, CURRENCY_SYMBOLS, PAYMENT_METHODS, EQUIPMENT_TYPES } from "@/lib/constants";
 import { format } from "date-fns";
@@ -432,14 +431,6 @@ export default async function MusteriDetailPage({
                             <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-200">
                               {PAYMENT_METHODS[pay.method as keyof typeof PAYMENT_METHODS]}
                             </Badge>
-                            <Link
-                              href={`/api/makbuz/${pay.id}`}
-                              target="_blank"
-                              title="Makbuz indir"
-                              className="text-gray-400 hover:text-blue-600"
-                            >
-                              <Receipt className="w-4 h-4" />
-                            </Link>
                           </div>
                         </div>
                       );
