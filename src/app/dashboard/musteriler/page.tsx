@@ -1,14 +1,37 @@
 import { requireAdminOrReception } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import Link from "next/link";
-import { Plus, Search, UserCheck, AlertCircle } from "lucide-react";
-import { SKILL_LEVELS, CURRENCY_SYMBOLS } from "@/lib/constants";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+} from "@/components/ui/avatar";
+import {
+  Search,
+  UserCheck,
+  AlertCircle,
+  Users,
+  UserPlus,
+  CalendarCheck,
+} from "lucide-react";
+import { SKILL_LEVELS } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
+import { CustomerRow } from "./customer-row";
+import { MusterilerFilters } from "./filters";
+import { NewStudentSheet } from "./new-student-sheet";
+import { toTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
+
+const AVATAR_COLORS = [
+  "bg-amber-100 text-amber-700",
+  "bg-blue-100 text-blue-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-violet-100 text-violet-700",
+  "bg-rose-100 text-rose-700",
+];
 
 export default async function MusterilerPage({
   searchParams,
@@ -21,57 +44,83 @@ export default async function MusterilerPage({
   const seviye = params.seviye ?? "";
   const durum = params.durum ?? "";
 
-  const students = await prisma.student.findMany({
-    where: {
-      isActive: true,
-      AND: [
-        q ? {
-          OR: [
-            { firstName: { contains: q } },
-            { lastName: { contains: q } },
-            { email: { contains: q } },
-            { phone: { contains: q } },
-          ],
-        } : {},
-        seviye ? { skillLevel: seviye } : {},
-      ],
-    },
-    include: {
-      payments: { select: { amount: true, direction: true, currency: true } },
-      hizmetler: {
-        where: { isActive: true, status: { not: "IPTAL" } },
-        select: { amount: true, currency: true, scheduledAt: true, createdAt: true },
-        orderBy: [{ scheduledAt: "desc" }, { createdAt: "desc" }],
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const [totalStudents, newStudents, todayReservationsRaw, students] = await Promise.all([
+    prisma.student.count({ where: { isActive: true } }),
+    prisma.student.count({ where: { isActive: true, createdAt: { gte: sevenDaysAgo } } }),
+    prisma.reservation.findMany({
+      where: {
+        isActive: true,
+        startTime: { gte: today, lt: tomorrow },
+        status: { notIn: ["CANCELLED", "WIND_CANCELLED"] },
       },
-      packagePurchases: {
-        where: { isActive: true },
-        select: { remainingHours: true, expiresAt: true },
+      include: { student: { select: { id: true, firstName: true, lastName: true } } },
+      orderBy: { startTime: "asc" },
+    }),
+    prisma.student.findMany({
+      where: {
+        isActive: true,
+        AND: [
+          q ? {
+            OR: [
+              { firstName: { contains: q } },
+              { lastName: { contains: q } },
+              { email: { contains: q } },
+              { phone: { contains: q } },
+            ],
+          } : {},
+          seviye ? { skillLevel: seviye } : {},
+        ],
       },
-    },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-  });
+      include: {
+        payments: { select: { amount: true, direction: true, currency: true } },
+        hizmetler: {
+          where: { isActive: true, status: { not: "IPTAL" } },
+          select: { amount: true, currency: true, scheduledAt: true, createdAt: true },
+          orderBy: [{ scheduledAt: "desc" }, { createdAt: "desc" }],
+        },
+        packagePurchases: {
+          where: { isActive: true },
+          select: { remainingHours: true, expiresAt: true, purchasePrice: true, currency: true },
+        },
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    }),
+  ]);
+
+  const rates = await getExchangeRates();
+
+  const todayReservationStudents = Array.from(
+    new Map(todayReservationsRaw.map((r) => [r.student.id, r.student])).values()
+  );
 
   const enriched = students.map((s) => {
-    const totalCharged = s.hizmetler.reduce((sum, h) => sum + h.amount, 0);
+    // Farklı para birimlerindeki işlemler TL'ye çevrilip toplanır.
+    const totalCharged =
+      s.hizmetler.reduce((sum, h) => sum + toTRY(h.amount, h.currency, rates), 0) +
+      s.packagePurchases.reduce((sum, p) => sum + toTRY(p.purchasePrice, p.currency, rates), 0);
     const totalPaid = s.payments
       .filter((p) => p.direction === "INCOMING")
-      .reduce((sum, p) => sum + p.amount, 0);
+      .reduce((sum, p) => sum + toTRY(p.amount, p.currency, rates), 0);
     const netBalance = totalPaid - totalCharged;
-    const currency = s.hizmetler[0]?.currency ?? "EUR";
-    const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
     const lastService = s.hizmetler[0]?.scheduledAt ?? s.hizmetler[0]?.createdAt;
     const now = new Date();
     const packageHoursLeft = s.packagePurchases
       .filter((p) => p.remainingHours > 0 && (!p.expiresAt || p.expiresAt > now))
       .reduce((sum, p) => sum + p.remainingHours, 0);
-    return { ...s, totalCharged, totalPaid, netBalance, currency, symbol, lastService, packageHoursLeft };
+    return { ...s, totalCharged, totalPaid, netBalance, lastService, packageHoursLeft };
   });
 
   const filtered = durum
     ? enriched.filter((s) => {
         if (durum === "borc") return s.netBalance < -0.01;
-        if (durum === "odenmis") return s.netBalance >= -0.01 && s.totalCharged > 0;
-        if (durum === "yok") return s.totalCharged === 0;
+        if (durum === "temiz") return s.netBalance >= -0.01;
         return true;
       })
     : enriched;
@@ -83,47 +132,68 @@ export default async function MusterilerPage({
           <h1 className="text-2xl font-bold text-gray-900">Müşteriler</h1>
           <p className="text-gray-500 text-sm mt-1">{filtered.length} müşteri</p>
         </div>
-        <Link href="/dashboard/musteriler/yeni">
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            Yeni Müşteri
-          </Button>
-        </Link>
+        <NewStudentSheet />
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border p-5 flex items-end justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                <Users className="w-4 h-4 text-gray-600" />
+              </div>
+              <span className="text-sm font-medium text-gray-700">Toplam Müşteri</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{totalStudents}</p>
+          </div>
+          <span className="text-xs text-gray-400">Tüm müşteri profilleri</span>
+        </div>
+
+        <div className="bg-white rounded-xl border p-5 flex items-end justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                <UserPlus className="w-4 h-4 text-violet-600" />
+              </div>
+              <span className="text-sm font-medium text-gray-700">Yeni Müşteriler</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{newStudents}</p>
+          </div>
+          <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500 border-gray-200">
+            Son 7 gün
+          </Badge>
+        </div>
+
+        <div className="bg-white rounded-xl border p-5 flex items-end justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                <CalendarCheck className="w-4 h-4 text-blue-600" />
+              </div>
+              <span className="text-sm font-medium text-gray-700">Bugün Rezervasyonu Olanlar</span>
+            </div>
+            <p className="text-3xl font-bold text-gray-900">{todayReservationStudents.length}</p>
+          </div>
+          {todayReservationStudents.length > 0 && (
+            <AvatarGroup>
+              {todayReservationStudents.slice(0, 4).map((s, i) => (
+                <Avatar key={s.id} size="sm">
+                  <AvatarFallback className={AVATAR_COLORS[i % AVATAR_COLORS.length]}>
+                    {(s.firstName[0] ?? "") + (s.lastName[0] ?? "")}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+              {todayReservationStudents.length > 4 && (
+                <AvatarGroupCount>+{todayReservationStudents.length - 4}</AvatarGroupCount>
+              )}
+            </AvatarGroup>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
-      <form className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            name="q"
-            defaultValue={q}
-            placeholder="Ad, soyad, telefon veya e-posta ara..."
-            className="pl-9"
-          />
-        </div>
-        <select
-          name="seviye"
-          defaultValue={seviye}
-          className="border rounded-md px-3 py-2 text-sm bg-white"
-        >
-          <option value="">Tüm Seviyeler</option>
-          {Object.entries(SKILL_LEVELS).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
-        <select
-          name="durum"
-          defaultValue={durum}
-          className="border rounded-md px-3 py-2 text-sm bg-white"
-        >
-          <option value="">Tüm Durumlar</option>
-          <option value="borc">Borç Var</option>
-          <option value="odenmis">Ödenmiş</option>
-          <option value="yok">Hizmet Yok</option>
-        </select>
-        <Button type="submit" variant="secondary">Filtrele</Button>
-      </form>
+      <MusterilerFilters q={q} seviye={seviye} durum={durum} />
 
       {/* Customers Table */}
       <Card>
@@ -146,7 +216,6 @@ export default async function MusterilerPage({
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Son Hizmet</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Ödeme Durumu</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">Ödenen / Borç</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -155,13 +224,11 @@ export default async function MusterilerPage({
                     const hasSurplus = student.netBalance > 0.01;
 
                     return (
-                      <tr key={student.id} className="hover:bg-gray-50">
+                      <CustomerRow key={student.id} href={`/dashboard/musteriler/${student.id}`}>
                         <td className="px-4 py-3">
-                          <Link href={`/dashboard/musteriler/${student.id}`} className="hover:text-blue-600">
-                            <div className="font-medium text-gray-900">
-                              {student.firstName} {student.lastName}
-                            </div>
-                          </Link>
+                          <div className="font-medium text-gray-900">
+                            {student.firstName} {student.lastName}
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             <Badge variant="secondary" className="text-xs">
                               {SKILL_LEVELS[student.skillLevel as keyof typeof SKILL_LEVELS]}
@@ -214,23 +281,18 @@ export default async function MusterilerPage({
                           {student.totalCharged > 0 ? (
                             <div>
                               <span className="text-green-600 font-medium">
-                                {student.symbol}{student.totalPaid.toFixed(2)}
+                                ₺{student.totalPaid.toFixed(2)}
                               </span>
                               <span className="text-gray-400 mx-1">/</span>
                               <span className={hasDebt ? "text-red-600 font-semibold" : "text-gray-700"}>
-                                {student.symbol}{student.totalCharged.toFixed(2)}
+                                ₺{student.totalCharged.toFixed(2)}
                               </span>
                             </div>
                           ) : (
                             <span className="text-gray-400">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <Link href={`/dashboard/musteriler/${student.id}`}>
-                            <Button variant="ghost" size="sm">Görüntüle</Button>
-                          </Link>
-                        </td>
-                      </tr>
+                      </CustomerRow>
                     );
                   })}
                 </tbody>

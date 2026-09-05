@@ -5,6 +5,8 @@ import { EXPENSE_CATEGORIES, PAYMENT_METHODS, LESSON_TYPES, CURRENCY_SYMBOLS } f
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { tr } from "date-fns/locale";
 import { ExportButton } from "./export-button";
+import { convertAmount } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 function formatMoney(amount: number, currency: string) {
   const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
@@ -75,54 +77,36 @@ export default async function ReportsPage({
     }),
   ]);
 
-  // Income by currency
-  const incomeByCurrency: Record<string, number> = {};
-  for (const p of payments) {
-    incomeByCurrency[p.currency] = (incomeByCurrency[p.currency] ?? 0) + p.amount;
-  }
+  // Özet toplamlar güncel kur ile TRY'ye çevrilip tek bir rakamda gösterilir;
+  // tekil işlem/satır tutarları kendi orijinal para biriminde kalır.
+  const rates = await getExchangeRates();
+  const toTRY = (amount: number, currency: string) => convertAmount(amount, currency, "TRY", rates);
 
-  // Income by payment method
-  const incomeByMethod: Record<string, number> = {};
-  for (const p of payments) {
-    const key = `${p.method}-${p.currency}`;
-    incomeByMethod[key] = (incomeByMethod[key] ?? 0) + p.amount;
-  }
+  const incomeTRY = payments.reduce((sum, p) => sum + toTRY(p.amount, p.currency), 0);
 
-  // Expenses by category
-  const expenseByCategory: Record<string, Record<string, number>> = {};
-  let totalExpenses: Record<string, number> = {};
+  // Expenses by category (TRY)
+  const expenseByCategoryTRY: Record<string, number> = {};
   for (const e of expenses) {
-    if (!expenseByCategory[e.category]) expenseByCategory[e.category] = {};
-    expenseByCategory[e.category][e.currency] = (expenseByCategory[e.category][e.currency] ?? 0) + e.amount;
-    totalExpenses[e.currency] = (totalExpenses[e.currency] ?? 0) + e.amount;
+    expenseByCategoryTRY[e.category] = (expenseByCategoryTRY[e.category] ?? 0) + toTRY(e.amount, e.currency);
   }
+  const totalExpensesTRY = expenses.reduce((sum, e) => sum + toTRY(e.amount, e.currency), 0);
 
-  // Instructor earnings
-  const earningsByInstructor: Record<string, { name: string; hours: number; earned: Record<string, number>; paid: Record<string, number> }> = {};
+  // Instructor earnings (TRY)
+  const earningsByInstructor: Record<string, { name: string; hours: number; earnedTRY: number; paidTRY: number }> = {};
   for (const e of instructorEarnings) {
     const name = e.instructor.user.name;
     if (!earningsByInstructor[e.instructorId]) {
-      earningsByInstructor[e.instructorId] = { name, hours: 0, earned: {}, paid: {} };
+      earningsByInstructor[e.instructorId] = { name, hours: 0, earnedTRY: 0, paidTRY: 0 };
     }
+    const amountTRY = toTRY(e.amount, e.currency);
     earningsByInstructor[e.instructorId].hours += e.hours;
-    earningsByInstructor[e.instructorId].earned[e.currency] =
-      (earningsByInstructor[e.instructorId].earned[e.currency] ?? 0) + e.amount;
+    earningsByInstructor[e.instructorId].earnedTRY += amountTRY;
     if (e.isPaid) {
-      earningsByInstructor[e.instructorId].paid[e.currency] =
-        (earningsByInstructor[e.instructorId].paid[e.currency] ?? 0) + e.amount;
+      earningsByInstructor[e.instructorId].paidTRY += amountTRY;
     }
   }
 
-  // Instructor payouts by instructor
-  const payoutsByInstructor: Record<string, { name: string; amount: Record<string, number> }> = {};
-  for (const p of instructorPayouts) {
-    const name = p.instructor.user.name;
-    if (!payoutsByInstructor[p.instructorId]) {
-      payoutsByInstructor[p.instructorId] = { name, amount: {} };
-    }
-    payoutsByInstructor[p.instructorId].amount[p.currency] =
-      (payoutsByInstructor[p.instructorId].amount[p.currency] ?? 0) + p.amount;
-  }
+  const totalPayoutsTRY = instructorPayouts.reduce((sum, p) => sum + toTRY(p.amount, p.currency), 0);
 
   // Pending receivables
   const receivables = packagePurchases
@@ -170,16 +154,12 @@ export default async function ReportsPage({
             <CardTitle className="text-base text-green-700">Gelir Özeti</CardTitle>
           </CardHeader>
           <CardContent>
-            {Object.entries(incomeByCurrency).length === 0 ? (
+            {payments.length === 0 ? (
               <p className="text-sm text-gray-400">Bu dönemde gelir yok</p>
             ) : (
-              <div className="space-y-2">
-                {Object.entries(incomeByCurrency).map(([currency, amount]) => (
-                  <div key={currency} className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Toplam ({currency})</span>
-                    <span className="font-bold text-green-600">{formatMoney(amount, currency)}</span>
-                  </div>
-                ))}
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Toplam (TRY)</span>
+                <span className="font-bold text-green-600">{formatMoney(incomeTRY, "TRY")}</span>
               </div>
             )}
           </CardContent>
@@ -191,21 +171,19 @@ export default async function ReportsPage({
             <CardTitle className="text-base text-red-700">Gider Özeti</CardTitle>
           </CardHeader>
           <CardContent>
-            {Object.keys(totalExpenses).length === 0 ? (
+            {expenses.length === 0 ? (
               <p className="text-sm text-gray-400">Bu dönemde gider yok</p>
             ) : (
               <div className="space-y-2">
-                {Object.entries(totalExpenses).map(([currency, amount]) => (
-                  <div key={currency} className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Toplam ({currency})</span>
-                    <span className="font-bold text-red-600">-{formatMoney(amount, currency)}</span>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Toplam (TRY)</span>
+                  <span className="font-bold text-red-600">-{formatMoney(totalExpensesTRY, "TRY")}</span>
+                </div>
                 <div className="mt-3 pt-3 border-t space-y-1">
-                  {Object.entries(expenseByCategory).map(([cat, byCurrency]) => (
+                  {Object.entries(expenseByCategoryTRY).map(([cat, amount]) => (
                     <div key={cat} className="flex justify-between items-center text-xs text-gray-500">
                       <span>{EXPENSE_CATEGORIES[cat as keyof typeof EXPENSE_CATEGORIES]}</span>
-                      <span>{Object.entries(byCurrency).map(([c, a]) => formatMoney(a, c)).join(" + ")}</span>
+                      <span>{formatMoney(amount, "TRY")}</span>
                     </div>
                   ))}
                 </div>
@@ -225,7 +203,7 @@ export default async function ReportsPage({
             ) : (
               <div className="divide-y">
                 {Object.values(earningsByInstructor).map((e, i) => {
-                  const currencies = Array.from(new Set([...Object.keys(e.earned), ...Object.keys(e.paid)]));
+                  const remaining = e.earnedTRY - e.paidTRY;
                   return (
                     <div key={i} className="py-2">
                       <div className="flex justify-between items-start">
@@ -234,18 +212,9 @@ export default async function ReportsPage({
                           <p className="text-xs text-gray-500">{e.hours.toFixed(1)} saat</p>
                         </div>
                         <div className="text-right">
-                          {currencies.map((c) => {
-                            const earned = e.earned[c] ?? 0;
-                            const paid = e.paid[c] ?? 0;
-                            const remaining = earned - paid;
-                            return (
-                              <div key={c}>
-                                <p className="text-sm font-semibold text-orange-600">{formatMoney(earned, c)}</p>
-                                {paid > 0 && <p className="text-xs text-green-600">Ödendi: {formatMoney(paid, c)}</p>}
-                                {remaining > 0 && <p className="text-xs text-red-500">Kalan: {formatMoney(remaining, c)}</p>}
-                              </div>
-                            );
-                          })}
+                          <p className="text-sm font-semibold text-orange-600">{formatMoney(e.earnedTRY, "TRY")}</p>
+                          {e.paidTRY > 0 && <p className="text-xs text-green-600">Ödendi: {formatMoney(e.paidTRY, "TRY")}</p>}
+                          {remaining > 0 && <p className="text-xs text-red-500">Kalan: {formatMoney(remaining, "TRY")}</p>}
                         </div>
                       </div>
                     </div>
@@ -276,23 +245,13 @@ export default async function ReportsPage({
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-blue-600">
-                      {formatMoney(p.amount, p.currency)}
+                      {formatMoney(toTRY(p.amount, p.currency), "TRY")}
                     </span>
                   </div>
                 ))}
-                <div className="pt-2 mt-1 border-t">
-                  {(() => {
-                    const totals = instructorPayouts.reduce((acc: Record<string, number>, p) => {
-                      acc[p.currency] = (acc[p.currency] ?? 0) + p.amount;
-                      return acc;
-                    }, {});
-                    return Object.entries(totals).map(([c, a]) => (
-                      <div key={c} className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Toplam ödenen ({c})</span>
-                        <span className="text-xs font-semibold text-blue-700">{formatMoney(a, c)}</span>
-                      </div>
-                    ));
-                  })()}
+                <div className="pt-2 mt-1 border-t flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Toplam ödenen (TRY)</span>
+                  <span className="text-xs font-semibold text-blue-700">{formatMoney(totalPayoutsTRY, "TRY")}</span>
                 </div>
               </div>
             )}
@@ -320,7 +279,7 @@ export default async function ReportsPage({
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-orange-600">
-                      {formatMoney(pp.owed, pp.currency)}
+                      {formatMoney(toTRY(pp.owed, pp.currency), "TRY")}
                     </span>
                   </div>
                 ))}

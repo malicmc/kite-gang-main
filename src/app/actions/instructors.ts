@@ -34,15 +34,15 @@ export async function createInstructor(
   const raw = {
     name: formData.get("name") as string,
     email: formData.get("email") as string,
-    password: formData.get("password") as string,
-    phone: formData.get("phone") as string,
+    password: (formData.get("password") as string) || undefined,
+    phone: (formData.get("phone") as string) || undefined,
     paymentModel: formData.get("paymentModel") as string,
-    hourlyRate: formData.get("hourlyRate") as string,
-    hourlyRateCurrency: formData.get("hourlyRateCurrency") as string,
-    revenueShare: formData.get("revenueShare") as string,
-    monthlySalary: formData.get("monthlySalary") as string,
-    salaryCurrency: formData.get("salaryCurrency") as string,
-    color: formData.get("color") as string,
+    hourlyRate: (formData.get("hourlyRate") as string) || undefined,
+    hourlyRateCurrency: (formData.get("hourlyRateCurrency") as string) || undefined,
+    revenueShare: (formData.get("revenueShare") as string) || undefined,
+    monthlySalary: (formData.get("monthlySalary") as string) || undefined,
+    salaryCurrency: (formData.get("salaryCurrency") as string) || undefined,
+    color: (formData.get("color") as string) || undefined,
   };
 
   const parsed = instructorSchema.safeParse(raw);
@@ -70,10 +70,10 @@ export async function createInstructor(
       phone: parsed.data.phone || null,
       paymentModel: parsed.data.paymentModel,
       hourlyRate: parsed.data.hourlyRate ?? null,
-      hourlyRateCurrency: parsed.data.hourlyRateCurrency || "EUR",
+      hourlyRateCurrency: parsed.data.hourlyRateCurrency || "TRY",
       revenueShare: parsed.data.revenueShare ?? null,
       monthlySalary: parsed.data.monthlySalary ?? null,
-      salaryCurrency: parsed.data.salaryCurrency || "EUR",
+      salaryCurrency: parsed.data.salaryCurrency || "TRY",
       color: parsed.data.color || "#3B82F6",
     },
   });
@@ -99,15 +99,15 @@ export async function updateInstructor(
   const raw = {
     name: formData.get("name") as string,
     email: formData.get("email") as string,
-    password: formData.get("password") as string,
-    phone: formData.get("phone") as string,
+    password: (formData.get("password") as string) || undefined,
+    phone: (formData.get("phone") as string) || undefined,
     paymentModel: formData.get("paymentModel") as string,
-    hourlyRate: formData.get("hourlyRate") as string,
-    hourlyRateCurrency: formData.get("hourlyRateCurrency") as string,
-    revenueShare: formData.get("revenueShare") as string,
-    monthlySalary: formData.get("monthlySalary") as string,
-    salaryCurrency: formData.get("salaryCurrency") as string,
-    color: formData.get("color") as string,
+    hourlyRate: (formData.get("hourlyRate") as string) || undefined,
+    hourlyRateCurrency: (formData.get("hourlyRateCurrency") as string) || undefined,
+    revenueShare: (formData.get("revenueShare") as string) || undefined,
+    monthlySalary: (formData.get("monthlySalary") as string) || undefined,
+    salaryCurrency: (formData.get("salaryCurrency") as string) || undefined,
+    color: (formData.get("color") as string) || undefined,
   };
 
   const parsed = instructorSchema.safeParse(raw);
@@ -136,10 +136,10 @@ export async function updateInstructor(
         phone: parsed.data.phone || null,
         paymentModel: parsed.data.paymentModel,
         hourlyRate: parsed.data.hourlyRate ?? null,
-        hourlyRateCurrency: parsed.data.hourlyRateCurrency || "EUR",
+        hourlyRateCurrency: parsed.data.hourlyRateCurrency || "TRY",
         revenueShare: parsed.data.revenueShare ?? null,
         monthlySalary: parsed.data.monthlySalary ?? null,
-        salaryCurrency: parsed.data.salaryCurrency || "EUR",
+        salaryCurrency: parsed.data.salaryCurrency || "TRY",
         color: parsed.data.color || "#3B82F6",
       },
     }),
@@ -190,6 +190,8 @@ export async function recordInstructorPayout(
     select: { user: { select: { name: true } } },
   });
 
+  // Eğitmene fiilen ödeme yapıldığında bu tutar kasadan düşülür (müşteri ödemesi
+  // alınırken tüm tutar zaten kasaya yansımıştı, hakediş burada ayrı bir gider olarak çıkar).
   const payout = await prisma.$transaction(async (tx) => {
     const created = await tx.instructorPayout.create({
       data: {
@@ -211,7 +213,6 @@ export async function recordInstructorPayout(
     return created;
   });
 
-  // Kasadan gerçekten para çıktığı için hakediş ödemesi de bir kasa hareketi olarak işlenir.
   if (cashAccountId) {
     await updateCashAccount(
       cashAccountId,
@@ -221,12 +222,41 @@ export async function recordInstructorPayout(
       null,
       null,
       user.userId,
-      `Hakediş ödemesi · ${instructor?.user.name ?? "Eğitmen"}`,
+      notes || `Hakediş ödemesi · ${instructor?.user.name ?? "Eğitmen"}`,
       payout.id
     );
   }
 
   revalidatePath(`/dashboard/egitmenler/${instructorId}`);
+  revalidatePath("/dashboard/raporlar");
+  revalidatePath("/dashboard/performans-ozeti");
   revalidatePath("/dashboard/kasa");
+  return {};
+}
+
+export async function deactivateInstructor(id: string): Promise<{ error?: string }> {
+  const currentUser = await requireAdmin();
+
+  const instructor = await prisma.instructor.findUnique({
+    where: { id },
+    select: { userId: true },
+  });
+  if (!instructor) return { error: "Eğitmen bulunamadı" };
+
+  // Eğitmeni ve hesabını birlikte pasife al — geçmiş ders/hakediş/ödeme kayıtları
+  // korunur, ancak eğitmen artık listelenmez ve sisteme giriş yapamaz.
+  await prisma.$transaction([
+    prisma.instructor.update({ where: { id }, data: { isActive: false } }),
+    prisma.user.update({ where: { id: instructor.userId }, data: { isActive: false } }),
+  ]);
+
+  await logAudit({
+    userId: currentUser.userId,
+    action: "DEACTIVATE",
+    entity: "Instructor",
+    entityId: id,
+  });
+
+  revalidatePath("/dashboard/egitmenler");
   return {};
 }

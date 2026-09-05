@@ -1,14 +1,15 @@
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import Link from "next/link";
-import { Plus, CalendarDays } from "lucide-react";
-import { LESSON_TYPES, CURRENCY_SYMBOLS } from "@/lib/constants";
+import { CalendarDays } from "lucide-react";
+import { LESSON_TYPES } from "@/lib/constants";
+import { formatTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { DateNav } from "./date-nav";
+import { NewReservationSheet } from "./new-reservation-sheet";
 
 const ATTENDANCE_STATUSES: Record<string, { label: string; class: string }> = {
   PLANNED: { label: "Bekleniyor", class: "bg-gray-100 text-gray-600" },
@@ -57,6 +58,28 @@ export default async function ReservationsPage({
     orderBy: { startTime: "asc" },
   });
 
+  const [students, instructors, equipment] = user.role !== "INSTRUCTOR"
+    ? await Promise.all([
+        prisma.student.findMany({
+          where: { isActive: true },
+          select: { id: true, firstName: true, lastName: true },
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        }),
+        prisma.instructor.findMany({
+          where: { isActive: true },
+          include: { user: { select: { name: true } } },
+          orderBy: { user: { name: "asc" } },
+        }),
+        prisma.equipment.findMany({
+          where: { isActive: true, status: { not: "RETIRED" } },
+          select: { id: true, type: true, name: true, size: true },
+          orderBy: [{ type: "asc" }, { name: "asc" }],
+        }),
+      ])
+    : [[], [], []];
+
+  const rates = await getExchangeRates();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -64,12 +87,7 @@ export default async function ReservationsPage({
           <h1 className="text-2xl font-bold text-gray-900">Rezervasyonlar</h1>
         </div>
         {user.role !== "INSTRUCTOR" && (
-          <Link href="/dashboard/rezervasyonlar/yeni">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Yeni Rezervasyon
-            </Button>
-          </Link>
+          <NewReservationSheet students={students} instructors={instructors} equipment={equipment} />
         )}
       </div>
 
@@ -117,8 +135,7 @@ export default async function ReservationsPage({
                       : hourlyRate
                       ? hourlyRate * res.plannedHours
                       : null;
-                    const currency = res.lesson?.purchase?.currency;
-                    const symbol = currency ? (CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency) : "";
+                    const currency = res.lesson?.purchase?.currency ?? "TRY";
 
                     return (
                       <tr key={res.id} className="hover:bg-gray-50">
@@ -178,7 +195,7 @@ export default async function ReservationsPage({
                             : `${res.plannedHours} saat`}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                          {lessonPrice ? `${symbol}${lessonPrice.toFixed(2)}` : "—"}
+                          {lessonPrice ? formatTRY(lessonPrice, currency, rates) : "—"}
                         </td>
                       </tr>
                     );

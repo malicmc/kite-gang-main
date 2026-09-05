@@ -7,26 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 import { createCashAccount } from "@/app/actions/expenses";
-import { CURRENCIES } from "@/lib/constants";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { useExchangeRates } from "@/hooks/use-exchange-rates";
-import { convertAmount } from "@/lib/currency";
 
 export function NewAccountForm() {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(createCashAccount, {});
   const prevPendingRef = useRef(false);
   const router = useRouter();
-  const [currency, setCurrency] = useState("EUR");
-  const [initialBalance, setInitialBalance] = useState("0");
-  const rates = useExchangeRates();
-
-  function handleCurrencyChange(next: string) {
-    const converted = convertAmount(Number(initialBalance) || 0, currency, next, rates);
-    if (converted) setInitialBalance(converted.toFixed(2));
-    setCurrency(next);
-  }
 
   useEffect(() => {
     if (prevPendingRef.current && !isPending) {
@@ -53,26 +41,18 @@ export function NewAccountForm() {
 
           <div className="space-y-1.5">
             <Label>Hesap Adı *</Label>
-            <Input name="name" required placeholder="Nakit Kasa EUR" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Tip</Label>
-              <select name="accountType" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
-                <option value="CASH">Nakit</option>
-                <option value="BANK">Banka</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Para Birimi</Label>
-              <select name="currency" className="w-full border rounded-md px-3 py-2 text-sm bg-white" value={currency} onChange={(e) => handleCurrencyChange(e.target.value)}>
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
+            <Input name="name" required placeholder="Nakit Kasa" />
           </div>
           <div className="space-y-1.5">
-            <Label>Başlangıç Bakiyesi</Label>
-            <Input name="initialBalance" type="number" step="0.01" value={initialBalance} onChange={(e) => setInitialBalance(e.target.value)} />
+            <Label>Tip</Label>
+            <select name="accountType" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
+              <option value="CASH">Nakit</option>
+              <option value="BANK">Banka</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Başlangıç Bakiyesi (₺)</Label>
+            <Input name="initialBalance" type="number" step="0.01" defaultValue="0" />
           </div>
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>İptal</Button>

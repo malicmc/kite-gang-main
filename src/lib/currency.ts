@@ -7,3 +7,13 @@ export function convertAmount(amount: number, from: string, to: string, rates: R
   if (!fromRate || !toRate) return amount;
   return (amount * fromRate) / toRate;
 }
+
+export function toTRY(amount: number, currency: string, rates: Rates | null): number {
+  return convertAmount(amount, currency, "TRY", rates);
+}
+
+// Uygulama genelinde tutarlar tutarlılık için TL'ye çevrilerek gösterilir;
+// orijinal işlem para birimi veritabanında korunur, sadece ekran gösterimi TL'dir.
+export function formatTRY(amount: number, currency: string, rates: Rates | null): string {
+  return `₺${toTRY(amount, currency, rates).toFixed(2)}`;
+}

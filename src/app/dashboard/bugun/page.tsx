@@ -2,7 +2,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CURRENCY_SYMBOLS, LESSON_TYPES, RESERVATION_STATUSES, STATUS_COLORS } from "@/lib/constants";
+import { LESSON_TYPES, RESERVATION_STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { CalendarClock, GraduationCap, Navigation, Waves, Wind } from "lucide-react";
@@ -12,16 +12,13 @@ import { CheckInButton } from "../operasyon/checkin-button";
 import { CheckOutDialog } from "../operasyon/checkout-dialog";
 import Link from "next/link";
 import { getWindConditions } from "@/lib/weather";
+import { toTRY, formatTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 function windSuitability(speedKn: number): { label: string; className: string } {
   if (speedKn < 10) return { label: "Zayıf", className: "text-gray-600 bg-gray-100" };
   if (speedKn <= 25) return { label: "İdeal", className: "text-emerald-700 bg-emerald-100" };
   return { label: "Kuvvetli", className: "text-amber-700 bg-amber-100" };
-}
-
-function formatMoney(amount: number, currency: string) {
-  const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
-  return `${symbol}${amount.toFixed(2)}`;
 }
 
 const HIZMET_STATUS_BADGE: Record<string, string> = {
@@ -85,10 +82,14 @@ export default async function BugunPage() {
       : Promise.resolve([]),
   ]);
 
-  const todayIncome: Record<string, number> = {};
-  for (const p of todayPayments) {
-    todayIncome[p.currency] = (todayIncome[p.currency] ?? 0) + (p.kasaAmount ?? p.amount);
-  }
+  const rates = await getExchangeRates();
+  const formatMoney = (amount: number, currency: string) => formatTRY(amount, currency, rates);
+
+  // Farklı para birimlerindeki tahsilatlar TL'ye çevrilip tek toplamda gösterilir.
+  const todayIncomeTRY = todayPayments.reduce(
+    (sum, p) => sum + toTRY(p.kasaAmount ?? p.amount, p.currency, rates),
+    0
+  );
 
   const totalCount = hizmetler.length + reservations.length;
   const totalBekleyen =
@@ -167,10 +168,8 @@ export default async function BugunPage() {
           <Card className="border-emerald-200 bg-emerald-50">
             <CardContent className="pt-3 pb-3">
               <p className="text-xs text-emerald-700 font-medium">Bugünkü Gelir</p>
-              {Object.entries(todayIncome).length > 0 ? (
-                Object.entries(todayIncome).map(([c, a]) => (
-                  <p key={c} className="text-lg font-bold text-emerald-800">{formatMoney(a, c)}</p>
-                ))
+              {todayPayments.length > 0 ? (
+                <p className="text-lg font-bold text-emerald-800">₺{todayIncomeTRY.toFixed(2)}</p>
               ) : (
                 <p className="text-lg font-bold text-emerald-800">—</p>
               )}

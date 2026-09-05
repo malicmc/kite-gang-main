@@ -6,17 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronLeft, Clock, TrendingUp, Wallet, GraduationCap } from "lucide-react";
-import { PAYMENT_MODELS, LESSON_TYPES, RESERVATION_STATUSES, STATUS_COLORS, CURRENCY_SYMBOLS } from "@/lib/constants";
+import { PAYMENT_MODELS, LESSON_TYPES, RESERVATION_STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { InstructorEditForm } from "./edit-form";
 import { PayoutForm } from "./payout-form";
 import { AddDersDialog } from "../add-ders-dialog";
-
-function formatMoney(amount: number, currency: string) {
-  const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
-  return `${symbol}${amount.toFixed(2)}`;
-}
+import { InstructorExportButton } from "./export-button";
+import { toTRY, formatTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 export default async function InstructorDetailPage({
   params,
@@ -74,7 +72,6 @@ export default async function InstructorDetailPage({
     user.role === "ADMIN"
       ? prisma.cashAccount.findMany({
           where: { isActive: true },
-          select: { id: true, name: true, currency: true, balance: true },
           orderBy: { name: "asc" },
         })
       : Promise.resolve([]),
@@ -82,31 +79,37 @@ export default async function InstructorDetailPage({
 
   if (!instructor) notFound();
 
+  const rates = await getExchangeRates();
+
   const totalHours = instructor.lessons.reduce((sum, l) => sum + (l.actualHours ?? 0), 0);
 
-  const earningsByCurrency: Record<string, { total: number; paid: number; pending: number }> = {};
+  // Farklı para birimlerindeki hakedişler TL'ye çevrilip tek bakiyede toplanır.
+  let earningsPaid = 0;
+  let earningsPending = 0;
   for (const e of instructor.earnings) {
-    if (!earningsByCurrency[e.currency]) {
-      earningsByCurrency[e.currency] = { total: 0, paid: 0, pending: 0 };
-    }
-    earningsByCurrency[e.currency].total += e.amount;
-    if (e.isPaid) earningsByCurrency[e.currency].paid += e.amount;
-    else earningsByCurrency[e.currency].pending += e.amount;
+    const tryAmount = toTRY(e.amount, e.currency, rates);
+    if (e.isPaid) earningsPaid += tryAmount;
+    else earningsPending += tryAmount;
   }
+  const earningsTotal = earningsPaid + earningsPending;
 
-  // New hizmet-based earnings
-  const hizmetEarningByCurrency: Record<string, { earned: number; sessions: number }> = {};
+  // Hizmet bazlı hakedişler
+  let hizmetEarned = 0;
+  let hizmetSessions = 0;
   for (const h of instructor.hizmetler) {
     if (h.status === "TAMAMLANDI" && h.instructorEarning) {
-      const cur = h.currency;
-      if (!hizmetEarningByCurrency[cur]) hizmetEarningByCurrency[cur] = { earned: 0, sessions: 0 };
-      hizmetEarningByCurrency[cur].earned += h.instructorEarning;
-      hizmetEarningByCurrency[cur].sessions += 1;
+      hizmetEarned += toTRY(h.instructorEarning, h.currency, rates);
+      hizmetSessions += 1;
     }
   }
 
-  const totalPayouts = instructor.payouts.reduce((sum, p) => sum + p.amount, 0);
-  const payoutCurrency = instructor.payouts[0]?.currency ?? instructor.hourlyRateCurrency;
+  const totalPayouts = instructor.payouts.reduce((sum, p) => sum + toTRY(p.amount, p.currency, rates), 0);
+  const hizmetNet = hizmetEarned - totalPayouts;
+
+  const payoutCurrencies = [...new Set([
+    ...instructor.earnings.map((e) => e.currency),
+    ...instructor.hizmetler.filter((h) => h.instructorEarning).map((h) => h.currency),
+  ])];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -134,16 +137,19 @@ export default async function InstructorDetailPage({
             </div>
           </div>
         </div>
-        {egitimSablonlar.length > 0 && (
-          <AddDersDialog
-            instructorId={instructor.id}
-            instructorName={instructor.user.name}
-            hourlyRate={instructor.hourlyRate}
-            hourlyRateCurrency={instructor.hourlyRateCurrency}
-            sablonlar={egitimSablonlar}
-            students={students}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {user.role === "ADMIN" && <InstructorExportButton instructorId={instructor.id} />}
+          {egitimSablonlar.length > 0 && (
+            <AddDersDialog
+              instructorId={instructor.id}
+              instructorName={instructor.user.name}
+              hourlyRate={instructor.hourlyRate}
+              hourlyRateCurrency={instructor.hourlyRateCurrency}
+              sablonlar={egitimSablonlar}
+              students={students}
+            />
+          )}
+        </div>
       </div>
 
       {/* Bakiye Özeti */}
@@ -158,69 +164,59 @@ export default async function InstructorDetailPage({
                 <p className="text-xl font-bold text-gray-900">{totalHours.toFixed(1)} saat</p>
               </div>
             </div>
-            {Object.entries(earningsByCurrency).map(([currency, data]) => (
-              <div key={currency} className="flex items-center gap-2">
+            {earningsTotal > 0 && (
+              <div className="flex items-center gap-2">
                 <Wallet className="w-3.5 h-3.5 text-gray-400" />
                 <div>
-                  <p className="text-xs text-gray-500">{currency} Bakiyesi</p>
+                  <p className="text-xs text-gray-500">Bakiye</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatMoney(data.paid, currency)} / {formatMoney(data.total, currency)}
+                    ₺{earningsPaid.toFixed(2)} / ₺{earningsTotal.toFixed(2)}
                   </p>
-                  {data.pending > 0 && (
+                  {earningsPending > 0 && (
                     <p className="text-xs text-orange-500">
-                      Bekleyen: {formatMoney(data.pending, currency)}
+                      Bekleyen: ₺{earningsPending.toFixed(2)}
                     </p>
                   )}
                 </div>
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Hizmet-based earning summary */}
-      {Object.keys(hizmetEarningByCurrency).length > 0 && (
+      {hizmetEarned > 0 && (
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-gray-500 mb-3 font-medium">Hizmet Hakediş Özeti</p>
             <div className="flex flex-wrap gap-6">
-              {Object.entries(hizmetEarningByCurrency).map(([currency, data]) => {
-                const payoutsInCur = instructor.payouts
-                  .filter((p) => p.currency === currency)
-                  .reduce((sum, p) => sum + p.amount, 0);
-                const net = data.earned - payoutsInCur;
-                return (
-                  <div key={currency} className="flex items-start gap-2">
-                    <TrendingUp className="w-3.5 h-3.5 text-green-500 mt-1" />
-                    <div>
-                      <p className="text-xs text-gray-500">
-                        {currency} · {data.sessions} seans
-                      </p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {formatMoney(data.earned, currency)}
-                      </p>
-                      {payoutsInCur > 0 && (
-                        <p className="text-xs text-gray-500">
-                          Ödenen: {formatMoney(payoutsInCur, currency)} ·{" "}
-                          <span className={net > 0 ? "text-orange-500" : "text-green-600"}>
-                            Kalan: {formatMoney(net, currency)}
-                          </span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="flex items-start gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-green-500 mt-1" />
+                <div>
+                  <p className="text-xs text-gray-500">{hizmetSessions} seans</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    ₺{hizmetEarned.toFixed(2)}
+                  </p>
+                  {totalPayouts > 0 && (
+                    <p className="text-xs text-gray-500">
+                      Ödenen: ₺{totalPayouts.toFixed(2)} ·{" "}
+                      <span className={hizmetNet > 0 ? "text-orange-500" : "text-green-600"}>
+                        Kalan: ₺{hizmetNet.toFixed(2)}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Payout form for admins */}
-      {user.role === "ADMIN" && (Object.keys(earningsByCurrency).length > 0 || Object.keys(hizmetEarningByCurrency).length > 0) && (
+      {user.role === "ADMIN" && (earningsTotal > 0 || hizmetEarned > 0) && (
         <PayoutForm
           instructorId={id}
-          currencies={[...new Set([...Object.keys(earningsByCurrency), ...Object.keys(hizmetEarningByCurrency)])]}
+          currencies={payoutCurrencies}
           cashAccounts={cashAccounts}
         />
       )}
@@ -281,7 +277,7 @@ export default async function InstructorDetailPage({
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold text-gray-900">
                         {lesson.instructorEarning
-                          ? formatMoney(lesson.instructorEarning.amount, lesson.instructorEarning.currency)
+                          ? formatTRY(lesson.instructorEarning.amount, lesson.instructorEarning.currency, rates)
                           : "—"}
                       </td>
                     </tr>
@@ -342,7 +338,7 @@ export default async function InstructorDetailPage({
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold text-gray-900">
                         {h.status === "TAMAMLANDI" && h.instructorEarning
-                          ? formatMoney(h.instructorEarning, h.currency)
+                          ? formatTRY(h.instructorEarning, h.currency, rates)
                           : "—"}
                       </td>
                     </tr>
@@ -365,7 +361,7 @@ export default async function InstructorDetailPage({
               {instructor.payouts.map((payout) => (
                 <div key={payout.id} className="py-2.5 flex justify-between items-center">
                   <div>
-                    <p className="text-sm font-medium">{formatMoney(payout.amount, payout.currency)}</p>
+                    <p className="text-sm font-medium">{formatTRY(payout.amount, payout.currency, rates)}</p>
                     <p className="text-xs text-gray-500">
                       {format(new Date(payout.paidAt), "d MMM yyyy", { locale: tr })}
                       {payout.notes && ` · ${payout.notes}`}

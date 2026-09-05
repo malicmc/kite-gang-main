@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CURRENCY_SYMBOLS, EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/lib/constants";
+import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/lib/constants";
+import { convertAmount, formatTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Wallet, TrendingDown, TrendingUp } from "lucide-react";
@@ -18,11 +20,6 @@ const METHOD_BADGE: Record<string, string> = {
   OTHER: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
-function formatMoney(amount: number, currency: string) {
-  const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
-  return `${symbol}${amount.toFixed(2)}`;
-}
-
 export default async function KasaPage({
   searchParams,
 }: {
@@ -36,7 +33,7 @@ export default async function KasaPage({
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
 
-  const [cashAccounts, recentExpenses, recentPayments, recentPayouts, monthlyIncome, monthlyExpense, monthlyPayouts] = await Promise.all([
+  const [cashAccounts, recentExpenses, recentPayments, recentPayouts, monthlyIncome, monthlyExpense, monthlyPayouts, rates] = await Promise.all([
     prisma.cashAccount.findMany({
       where: { isActive: true },
       include: { _count: { select: { entries: true } } },
@@ -62,19 +59,21 @@ export default async function KasaPage({
     }),
     prisma.payment.findMany({
       where: { direction: "INCOMING", recordedAt: { gte: monthStart, lte: monthEnd } },
-      select: { amount: true, kasaAmount: true },
+      select: { amount: true, kasaAmount: true, currency: true },
     }),
-    prisma.expense.aggregate({
+    prisma.expense.findMany({
       where: { isActive: true, expenseDate: { gte: monthStart, lte: monthEnd } },
-      _sum: { amount: true },
-      _count: true,
+      select: { amount: true, currency: true },
     }),
-    prisma.instructorPayout.aggregate({
+    prisma.instructorPayout.findMany({
       where: { cashRegisterEntry: { isNot: null }, paidAt: { gte: monthStart, lte: monthEnd } },
-      _sum: { amount: true },
-      _count: true,
+      select: { amount: true, currency: true },
     }),
+    getExchangeRates(),
   ]);
+
+  // Farklı para birimlerindeki tüm işlem tutarları tutarlılık için TL'ye çevrilerek gösterilir.
+  const formatMoney = (amount: number, currency: string) => formatTRY(amount, currency, rates);
 
   const totalByCurrency: Record<string, { cash: number; bank: number }> = {};
   for (const acc of cashAccounts) {
@@ -83,9 +82,15 @@ export default async function KasaPage({
     else totalByCurrency[acc.currency].bank += acc.balance;
   }
 
-  const thisMonthIncome = monthlyIncome.reduce((sum, p) => sum + (p.kasaAmount ?? p.amount), 0);
-  const thisMonthExpense = (monthlyExpense._sum.amount ?? 0) + (monthlyPayouts._sum.amount ?? 0);
-  const thisMonthExpenseCount = monthlyExpense._count + monthlyPayouts._count;
+  // Farklı para birimlerindeki tutarlar güncel kur ile TRY'ye çevrilip toplanır.
+  const thisMonthIncome = monthlyIncome.reduce(
+    (sum, p) => sum + convertAmount(p.kasaAmount ?? p.amount, p.currency, "TRY", rates),
+    0
+  );
+  const thisMonthExpense =
+    monthlyExpense.reduce((sum, e) => sum + convertAmount(e.amount, e.currency, "TRY", rates), 0) +
+    monthlyPayouts.reduce((sum, p) => sum + convertAmount(p.amount, p.currency, "TRY", rates), 0);
+  const thisMonthExpenseCount = monthlyExpense.length + monthlyPayouts.length;
   const thisMonthNet = thisMonthIncome - thisMonthExpense;
 
   // Build combined + indexed transactions list
@@ -116,7 +121,7 @@ export default async function KasaPage({
             <div className="flex items-center gap-2 text-green-700 text-xs mb-1">
               <TrendingUp className="w-3.5 h-3.5" /> Bu Ay Gelir
             </div>
-            <p className="text-2xl font-bold text-green-700">{formatMoney(thisMonthIncome, "EUR")}</p>
+            <p className="text-2xl font-bold text-green-700">{formatMoney(thisMonthIncome, "TRY")}</p>
             <p className="text-xs text-green-600 mt-0.5">{format(now, "MMMM yyyy", { locale: tr })}</p>
           </CardContent>
         </Card>
@@ -125,7 +130,7 @@ export default async function KasaPage({
             <div className="flex items-center gap-2 text-red-700 text-xs mb-1">
               <TrendingDown className="w-3.5 h-3.5" /> Bu Ay Gider
             </div>
-            <p className="text-2xl font-bold text-red-700">{formatMoney(thisMonthExpense, "EUR")}</p>
+            <p className="text-2xl font-bold text-red-700">{formatMoney(thisMonthExpense, "TRY")}</p>
             <p className="text-xs text-red-600 mt-0.5">{thisMonthExpenseCount} gider kalemi</p>
           </CardContent>
         </Card>
@@ -135,7 +140,7 @@ export default async function KasaPage({
               <Wallet className="w-3.5 h-3.5" /> Net (Bu Ay)
             </div>
             <p className={`text-2xl font-bold ${thisMonthNet >= 0 ? "text-blue-700" : "text-red-700"}`}>
-              {thisMonthNet >= 0 ? "+" : ""}{formatMoney(thisMonthNet, "EUR")}
+              {thisMonthNet >= 0 ? "+" : ""}{formatMoney(thisMonthNet, "TRY")}
             </p>
             <p className="text-xs text-gray-500 mt-0.5">Gelir - Gider</p>
           </CardContent>

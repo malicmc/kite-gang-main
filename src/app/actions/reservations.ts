@@ -90,7 +90,7 @@ export async function createReservation(
       createdById: user.userId,
       equipmentId: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.equipmentId : null,
       rentalAmount: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.rentalAmount : null,
-      rentalCurrency: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.rentalCurrency ?? "EUR" : null,
+      rentalCurrency: parsed.data.lessonType === "EQUIPMENT_RENTAL" ? parsed.data.rentalCurrency ?? "TRY" : null,
     },
   });
 
@@ -286,12 +286,12 @@ export async function checkOut(
   // Calculate instructor earning — eğitmensiz kiralamalarda hakediş yok
   const instructor = lesson.instructor;
   let earningAmount = 0;
-  let earningCurrency = "EUR";
+  let earningCurrency = "TRY";
 
   if (instructor) {
     if (instructor.paymentModel === "HOURLY_RATE" && instructor.hourlyRate) {
       earningAmount = actualHours * instructor.hourlyRate;
-      earningCurrency = instructor.hourlyRateCurrency ?? "EUR";
+      earningCurrency = instructor.hourlyRateCurrency ?? "TRY";
     } else if (instructor.paymentModel === "REVENUE_SHARE" && instructor.revenueShare) {
       if (lesson.purchaseId) {
         const purchase = await prisma.packagePurchase.findUnique({ where: { id: lesson.purchaseId } });

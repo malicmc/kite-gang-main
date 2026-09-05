@@ -2,17 +2,14 @@ import { requireAdminOrReception } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CURRENCY_SYMBOLS, EQUIPMENT_TYPES } from "@/lib/constants";
+import { EQUIPMENT_TYPES } from "@/lib/constants";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Users, Clock, Wallet, GraduationCap, Wrench, Package } from "lucide-react";
 import { PeriodNav } from "./period-nav";
 import Link from "next/link";
-
-function formatMoney(amount: number, currency: string) {
-  const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
-  return `${symbol}${amount.toFixed(2)}`;
-}
+import { convertAmount, formatTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 type Session = {
   date: Date;
@@ -60,7 +57,7 @@ export default async function PerformansOzetiPage({
     ],
   };
 
-  const [lessons, hizmetler, instructors, kiralamalar, equipmentList, randevuKiralamalari] = await Promise.all([
+  const [lessons, hizmetler, instructors, kiralamalar, equipmentList, randevuKiralamalari, rates] = await Promise.all([
     prisma.lesson.findMany({
       where: { checkInTime: { gte: rangeStart, lte: rangeEnd } },
       include: {
@@ -99,7 +96,12 @@ export default async function PerformansOzetiPage({
         equipment: { select: { id: true, type: true, name: true, size: true } },
       },
     }),
+    getExchangeRates(),
   ]);
+
+  // Farklı para birimlerindeki tüm tutarlar tutarlılık için TL'ye çevrilerek gösterilir.
+  const toTRY = (amount: number, currency: string) => convertAmount(amount, currency, "TRY", rates);
+  const formatMoney = (amount: number, currency: string) => formatTRY(amount, currency, rates);
 
   // ─── Eğitmen dersleri ───────────────────────────────────────────────────────
 
@@ -141,7 +143,7 @@ export default async function PerformansOzetiPage({
     color: string;
     sessions: Session[];
     totalHours: number;
-    earningsByCurrency: Record<string, number>;
+    earningsTRY: number;
     studentCounts: Record<string, number>;
   };
 
@@ -153,12 +155,12 @@ export default async function PerformansOzetiPage({
       color: inst.color,
       sessions: [],
       totalHours: 0,
-      earningsByCurrency: {},
+      earningsTRY: 0,
       studentCounts: {},
     });
   }
 
-  const grandEarnings: Record<string, number> = {};
+  let grandEarningsTRY = 0;
 
   for (const s of sessions) {
     if (!s.instructorId) continue;
@@ -168,8 +170,9 @@ export default async function PerformansOzetiPage({
     if (s.hours) stat.totalHours += s.hours;
     stat.studentCounts[s.studentName] = (stat.studentCounts[s.studentName] ?? 0) + 1;
     if (s.earned && s.amount > 0) {
-      stat.earningsByCurrency[s.currency] = (stat.earningsByCurrency[s.currency] ?? 0) + s.amount;
-      grandEarnings[s.currency] = (grandEarnings[s.currency] ?? 0) + s.amount;
+      const amountTRY = toTRY(s.amount, s.currency);
+      stat.earningsTRY += amountTRY;
+      grandEarningsTRY += amountTRY;
     }
   }
 
@@ -198,7 +201,7 @@ export default async function PerformansOzetiPage({
       studentName: `${r.student.firstName} ${r.student.lastName}`,
       title: "Ekipman Kiralama (Randevu)",
       amount: r.status === "COMPLETED" ? r.rentalAmount ?? 0 : 0,
-      currency: r.rentalCurrency ?? "EUR",
+      currency: r.rentalCurrency ?? "TRY",
       earned: r.status === "COMPLETED",
     });
   }
@@ -209,7 +212,7 @@ export default async function PerformansOzetiPage({
     id: string;
     name: string;
     rentals: Rental[];
-    revenueByCurrency: Record<string, number>;
+    revenueTRY: number;
   };
 
   const byEquipment = new Map<string, EquipmentStat>();
@@ -219,29 +222,30 @@ export default async function PerformansOzetiPage({
       id: eq.id,
       name: `${typeLabel} — ${eq.name}${eq.size ? ` (${eq.size})` : ""}`,
       rentals: [],
-      revenueByCurrency: {},
+      revenueTRY: 0,
     });
   }
   byEquipment.set(UNASSIGNED_KEY, {
     id: UNASSIGNED_KEY,
     name: "Belirtilmemiş / Genel Kiralama",
     rentals: [],
-    revenueByCurrency: {},
+    revenueTRY: 0,
   });
 
-  const grandRentalRevenue: Record<string, number> = {};
+  let grandRentalRevenueTRY = 0;
 
   for (const r of rentals) {
     let stat = byEquipment.get(r.equipmentKey);
     if (!stat) {
       // Equipment was deactivated after the rental was recorded
-      stat = { id: r.equipmentKey, name: "Silinmiş / Pasif Ekipman", rentals: [], revenueByCurrency: {} };
+      stat = { id: r.equipmentKey, name: "Silinmiş / Pasif Ekipman", rentals: [], revenueTRY: 0 };
       byEquipment.set(r.equipmentKey, stat);
     }
     stat.rentals.push(r);
     if (r.earned && r.amount > 0) {
-      stat.revenueByCurrency[r.currency] = (stat.revenueByCurrency[r.currency] ?? 0) + r.amount;
-      grandRentalRevenue[r.currency] = (grandRentalRevenue[r.currency] ?? 0) + r.amount;
+      const amountTRY = toTRY(r.amount, r.currency);
+      stat.revenueTRY += amountTRY;
+      grandRentalRevenueTRY += amountTRY;
     }
   }
 
@@ -305,48 +309,26 @@ export default async function PerformansOzetiPage({
             <p className="text-2xl font-bold text-gray-900">{rentals.length}</p>
           </CardContent>
         </Card>
-        {Object.entries(grandEarnings).length > 0 ? (
-          Object.entries(grandEarnings).map(([currency, amount]) => (
-            <Card key={currency} className="border-green-200 bg-green-50">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-2 text-green-700 text-xs mb-1">
-                  <Wallet className="w-3.5 h-3.5" /> Eğitmen Kazancı ({currency})
-                </div>
-                <p className="text-2xl font-bold text-green-700">{formatMoney(amount, currency)}</p>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <Card>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
-                <Wallet className="w-3.5 h-3.5" /> Eğitmen Kazancı
-              </div>
-              <p className="text-2xl font-bold text-gray-400">—</p>
-            </CardContent>
-          </Card>
-        )}
-        {Object.entries(grandRentalRevenue).length > 0 ? (
-          Object.entries(grandRentalRevenue).map(([currency, amount]) => (
-            <Card key={currency} className="border-orange-200 bg-orange-50">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center gap-2 text-orange-700 text-xs mb-1">
-                  <Wallet className="w-3.5 h-3.5" /> Kiralama Geliri ({currency})
-                </div>
-                <p className="text-2xl font-bold text-orange-700">{formatMoney(amount, currency)}</p>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <Card>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
-                <Wallet className="w-3.5 h-3.5" /> Kiralama Geliri
-              </div>
-              <p className="text-2xl font-bold text-gray-400">—</p>
-            </CardContent>
-          </Card>
-        )}
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2 text-green-700 text-xs mb-1">
+              <Wallet className="w-3.5 h-3.5" /> Eğitmen Kazancı
+            </div>
+            <p className="text-2xl font-bold text-green-700">
+              {grandEarningsTRY > 0 ? formatMoney(grandEarningsTRY, "TRY") : "—"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2 text-orange-700 text-xs mb-1">
+              <Wallet className="w-3.5 h-3.5" /> Kiralama Geliri
+            </div>
+            <p className="text-2xl font-bold text-orange-700">
+              {grandRentalRevenueTRY > 0 ? formatMoney(grandRentalRevenueTRY, "TRY") : "—"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Per-instructor breakdown */}
@@ -385,12 +367,10 @@ export default async function PerformansOzetiPage({
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      {Object.entries(stat.earningsByCurrency).length > 0 ? (
-                        Object.entries(stat.earningsByCurrency).map(([currency, amount]) => (
-                          <Badge key={currency} className="bg-green-100 text-green-700 border-green-200">
-                            {formatMoney(amount, currency)}
-                          </Badge>
-                        ))
+                      {stat.earningsTRY > 0 ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-200">
+                          {formatMoney(stat.earningsTRY, "TRY")}
+                        </Badge>
                       ) : (
                         <Badge variant="secondary">Kazanç yok</Badge>
                       )}
@@ -477,12 +457,10 @@ export default async function PerformansOzetiPage({
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      {Object.entries(stat.revenueByCurrency).length > 0 ? (
-                        Object.entries(stat.revenueByCurrency).map(([currency, amount]) => (
-                          <Badge key={currency} className="bg-orange-100 text-orange-700 border-orange-200">
-                            {formatMoney(amount, currency)}
-                          </Badge>
-                        ))
+                      {stat.revenueTRY > 0 ? (
+                        <Badge className="bg-orange-100 text-orange-700 border-orange-200">
+                          {formatMoney(stat.revenueTRY, "TRY")}
+                        </Badge>
                       ) : (
                         <Badge variant="secondary">Gelir yok</Badge>
                       )}

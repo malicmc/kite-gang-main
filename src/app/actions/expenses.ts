@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { updateCashAccount } from "./packages";
+import { updateCashAccount, convertForAccount } from "./packages";
 
 const expenseSchema = z.object({
   category: z.enum([
@@ -45,7 +45,8 @@ export async function createExpense(
   if (parsed.data.cashAccountId) {
     const account = await prisma.cashAccount.findUnique({ where: { id: parsed.data.cashAccountId } });
     if (!account) return { error: "Kasa hesabı bulunamadı" };
-    if (account.balance < parsed.data.amount) {
+    const converted = await convertForAccount(parsed.data.amount, parsed.data.currency, account);
+    if (account.balance < converted.amount) {
       return { error: `Kasa bakiyesi yetersiz. Mevcut: ${account.balance.toFixed(2)} ${account.currency}` };
     }
   }
@@ -87,10 +88,11 @@ export async function createExpense(
   return {};
 }
 
+// Kasa hesapları yalnızca TRY üzerinden tutulur — yabancı para birimindeki
+// ödemeler de kasaya girerken TRY'ye çevrilir (bkz. updateCashAccount).
 const cashAccountSchema = z.object({
   name: z.string().min(1, "Hesap adı zorunlu"),
   accountType: z.enum(["CASH", "BANK"]),
-  currency: z.enum(["EUR", "USD", "TRY"]),
   initialBalance: z.coerce.number().min(0).default(0),
 });
 
@@ -103,7 +105,6 @@ export async function createCashAccount(
   const raw = {
     name: formData.get("name") as string,
     accountType: formData.get("accountType") as string,
-    currency: formData.get("currency") as string,
     initialBalance: formData.get("initialBalance") as string,
   };
 
@@ -114,7 +115,7 @@ export async function createCashAccount(
     data: {
       name: parsed.data.name,
       accountType: parsed.data.accountType,
-      currency: parsed.data.currency,
+      currency: "TRY",
       balance: parsed.data.initialBalance,
     },
   });

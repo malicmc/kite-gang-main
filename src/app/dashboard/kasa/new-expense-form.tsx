@@ -20,7 +20,7 @@ export function NewExpenseForm({ cashAccounts }: { cashAccounts: { id: string; n
   const prevPendingRef = useRef(false);
   const router = useRouter();
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("EUR");
+  const [currency, setCurrency] = useState("TRY");
   const rates = useExchangeRates();
 
   function handleCurrencyChange(next: string) {

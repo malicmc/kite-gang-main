@@ -50,7 +50,7 @@ export function AssignHizmetDialog({
 
   const [selectedSablon, setSelectedSablon] = useState<Sablon | null>(null);
   const [price, setPrice] = useState("0");
-  const [currency, setCurrency] = useState("EUR");
+  const [currency, setCurrency] = useState("TRY");
   const [quantity, setQuantity] = useState("1");
   const [scheduledAt, setScheduledAt] = useState(defaultAt);
   const [instructorId, setInstructorId] = useState("");
@@ -87,7 +87,7 @@ export function AssignHizmetDialog({
     setSelectedSablon(s);
     const first = s.fiyatlar[0];
     setPrice((first?.price ?? 0).toFixed(2));
-    setCurrency(first?.currency ?? "EUR");
+    setCurrency(first?.currency ?? "TRY");
     setQuantity("1");
     setInstructorId("");
     setInstructorEarning("");
@@ -126,6 +126,7 @@ export function AssignHizmetDialog({
     KIRALAMA: sablonlar.filter((s) => s.category === "KIRALAMA"),
     URUN:     sablonlar.filter((s) => s.category === "URUN"),
     UYELIK:   sablonlar.filter((s) => s.category === "UYELIK"),
+    ETKINLIK: sablonlar.filter((s) => s.category === "ETKINLIK"),
   };
 
   return (

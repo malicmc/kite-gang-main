@@ -14,6 +14,8 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { getWindConditions } from "@/lib/weather";
 import { WindWidget } from "@/components/weather/wind-widget";
+import { convertAmount } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 function formatMoney(amount: number, currency: string) {
   const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
@@ -48,10 +50,12 @@ export default async function DashboardPage() {
     const todayPayments = await prisma.payment.findMany({
       where: { direction: "INCOMING", recordedAt: { gte: today, lt: tomorrow } },
     });
-    const todayIncome: Record<string, number> = {};
-    for (const p of todayPayments) {
-      todayIncome[p.currency] = (todayIncome[p.currency] ?? 0) + (p.kasaAmount ?? p.amount);
-    }
+    // Farklı para birimlerindeki ödemeler güncel kur ile TRY'ye çevrilip tek toplamda gösterilir.
+    const rates = await getExchangeRates();
+    const todayIncomeTRY = todayPayments.reduce(
+      (sum, p) => sum + convertAmount(p.kasaAmount ?? p.amount, p.currency, "TRY", rates),
+      0
+    );
 
     const cashAccounts = await prisma.cashAccount.findMany({ where: { isActive: true } });
     const thisMonthLessons = await prisma.lesson.count({
@@ -69,7 +73,7 @@ export default async function DashboardPage() {
       },
     });
 
-    return { todayIncome, cashAccounts, thisMonthLessons, activeStudents, pendingHizmetler, todayHizmetler };
+    return { todayIncomeTRY, cashAccounts, thisMonthLessons, activeStudents, pendingHizmetler, todayHizmetler };
   })() : null;
 
   return (
@@ -95,10 +99,8 @@ export default async function DashboardPage() {
                 <TrendingUp className="w-4 h-4 text-white" />
               </div>
             </div>
-            {Object.entries(stats.todayIncome).length > 0 ? (
-              Object.entries(stats.todayIncome).map(([currency, amount]) => (
-                <p key={currency} className="relative text-2xl font-heading font-semibold">{formatMoney(amount, currency)}</p>
-              ))
+            {stats.todayIncomeTRY > 0 ? (
+              <p className="relative text-2xl font-heading font-semibold">{formatMoney(stats.todayIncomeTRY, "TRY")}</p>
             ) : (
               <p className="relative text-2xl font-heading font-semibold text-white/50">—</p>
             )}

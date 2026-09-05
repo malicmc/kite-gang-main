@@ -20,7 +20,7 @@ interface SellPackageFormProps {
 export function SellPackageForm({ studentId, packages, cashAccounts }: SellPackageFormProps) {
   const [state, formAction, isPending] = useActionState(sellPackage, {});
   const [selectedPkg, setSelectedPkg] = useState<LessonPackage | null>(packages[0] ?? null);
-  const [currency, setCurrency] = useState(selectedPkg?.currency ?? "EUR");
+  const [currency, setCurrency] = useState(selectedPkg?.currency ?? "TRY");
   const [price, setPrice] = useState(selectedPkg?.price ?? 0);
   const [paidAmount, setPaidAmount] = useState(0);
   const rates = useExchangeRates();
@@ -75,7 +75,9 @@ export function SellPackageForm({ studentId, packages, cashAccounts }: SellPacka
           {selectedPkg && (
             <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm">
               <p className="font-medium text-blue-900">{selectedPkg.name}</p>
-              <p className="text-blue-600">{selectedPkg.totalHours} saat • {CURRENCY_SYMBOLS[selectedPkg.currency as keyof typeof CURRENCY_SYMBOLS]}{selectedPkg.price}</p>
+              <p className="text-blue-600">
+                {selectedPkg.totalHours} saat • ₺{convertAmount(selectedPkg.price, selectedPkg.currency, "TRY", rates).toFixed(2)}
+              </p>
             </div>
           )}
 
@@ -133,9 +135,8 @@ export function SellPackageForm({ studentId, packages, cashAccounts }: SellPacka
             </div>
             {cashAccounts.length > 0 && (
               <div className="space-y-1.5">
-                <Label>Kasa Hesabı</Label>
-                <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
-                  <option value="">Kasa güncellenmesin</option>
+                <Label>Kasa Hesabı *</Label>
+                <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white" required>
                   {cashAccounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
                       {acc.name} ({acc.currency})

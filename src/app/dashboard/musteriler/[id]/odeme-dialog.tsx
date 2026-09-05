@@ -42,13 +42,9 @@ export function OdemeDialog({
   const prevRef = useRef(false);
   const router = useRouter();
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("EUR");
+  const [currency, setCurrency] = useState("TRY");
   const [hizmetId, setHizmetId] = useState("");
   const rates = useExchangeRates();
-
-  const selectedHizmet = hizmetler.find((h) => h.id === hizmetId) ?? null;
-  const instructorCut = selectedHizmet?.instructorEarning ?? 0;
-  const kasaNet = Math.max(0, (Number(amount) || 0) - instructorCut);
 
   function handleCurrencyChange(next: string) {
     const converted = convertAmount(Number(amount) || 0, currency, next, rates);
@@ -127,13 +123,6 @@ export function OdemeDialog({
             </div>
           </div>
 
-          {selectedHizmet && instructorCut > 0 && (
-            <div className="text-xs bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-amber-800 space-y-0.5">
-              <p>Eğitmen hakedişi: {formatMoney(instructorCut, currency)} <span className="text-amber-600">(kasaya yansımaz)</span></p>
-              <p className="font-semibold">Kasaya net yansıyacak: {formatMoney(kasaNet, currency)}</p>
-            </div>
-          )}
-
           <div className="space-y-1.5">
             <Label>Ödeme Yöntemi *</Label>
             <select name="method" className="w-full border rounded-md px-3 py-2 text-sm bg-white" required>
@@ -145,9 +134,8 @@ export function OdemeDialog({
 
           {cashAccounts.length > 0 && (
             <div className="space-y-1.5">
-              <Label>Kasa Hesabı</Label>
-              <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white">
-                <option value="">Kasa güncellenmesin</option>
+              <Label>Kasa Hesabı *</Label>
+              <select name="cashAccountId" className="w-full border rounded-md px-3 py-2 text-sm bg-white" required>
                 {cashAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
                     {acc.name} ({acc.currency})

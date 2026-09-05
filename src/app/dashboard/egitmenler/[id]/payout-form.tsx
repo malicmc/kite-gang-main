@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { toast } from "sonner";
 import { useEffect } from "react";
+import type { CashAccount } from "@/generated/prisma/client";
 
 interface PayoutFormProps {
   instructorId: string;
   currencies: string[];
-  cashAccounts: { id: string; name: string; currency: string; balance: number }[];
+  cashAccounts: CashAccount[];
 }
 
 export function PayoutForm({ instructorId, currencies, cashAccounts }: PayoutFormProps) {

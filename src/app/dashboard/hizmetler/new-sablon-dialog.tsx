@@ -11,7 +11,17 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { FiyatRowsEditor, emptyFiyatRow, type FiyatRow } from "./fiyat-rows-editor";
 
-export function NewSablonDialog({ category, categoryLabel }: { category: string; categoryLabel: string }) {
+export function NewSablonDialog({
+  category,
+  categoryLabel,
+  triggerLabel,
+  variant = "outline",
+}: {
+  category: string;
+  categoryLabel: string;
+  triggerLabel?: string;
+  variant?: "outline" | "default";
+}) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(createHizmetSablonu, {});
   const [rows, setRows] = useState<FiyatRow[]>([emptyFiyatRow(category)]);
@@ -32,8 +42,8 @@ export function NewSablonDialog({ category, categoryLabel }: { category: string;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
-        <Plus className="w-3.5 h-3.5 mr-1" /> Ekle
+      <DialogTrigger render={<Button variant={variant} size="sm" />}>
+        <Plus className="w-3.5 h-3.5 mr-1" /> {triggerLabel ?? "Ekle"}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -49,7 +59,36 @@ export function NewSablonDialog({ category, categoryLabel }: { category: string;
 
           <div className="space-y-1.5">
             <Label>Hizmet Adı *</Label>
-            <Input name="name" required placeholder="Örn: Özel Ders" />
+            <Input name="name" required placeholder="Örn: Kitesurf Özel Ders" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Kategori</Label>
+              <Input name="subCategory" placeholder="Örn: Kitesurf" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Gerekli Kişi Sayısı</Label>
+              <Input name="requiredPeople" type="number" min="1" placeholder="Örn: 1" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Açıklama</Label>
+            <Input name="description" placeholder="Kısa açıklama (opsiyonel)" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Online Uygunluk</Label>
+            <select
+              name="onlineVisibility"
+              defaultValue="LISTED"
+              className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+            >
+              <option value="LISTED">Online listelenir</option>
+              <option value="PARTNER_ONLY">Yalnızca Partner Paneli</option>
+              <option value="HIDDEN">Gizli</option>
+            </select>
           </div>
 
           {category === "UYELIK" && (

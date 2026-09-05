@@ -22,29 +22,31 @@ import {
   TrendingUp,
   Wallet,
   PackageCheck,
+  CalendarDays,
+  Cake,
+  Weight,
 } from "lucide-react";
-import { SKILL_LEVELS, LESSON_TYPES, CURRENCY_SYMBOLS, PAYMENT_METHODS, EQUIPMENT_TYPES } from "@/lib/constants";
+import { SKILL_LEVELS, LESSON_TYPES, PAYMENT_METHODS, EQUIPMENT_TYPES, GENDER_OPTIONS } from "@/lib/constants";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { StudentEditForm } from "./edit-form";
 import { AssignHizmetDialog } from "./assign-hizmet-dialog";
 import { HizmetRowActions } from "./hizmet-row-actions";
 import { OdemeDialog } from "./odeme-dialog";
-
-function formatMoney(amount: number, currency: string) {
-  const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
-  return `${symbol}${amount.toFixed(2)}`;
-}
+import { formatTRY, toTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 const CAT_ICON: Record<string, any> = {
   EGITIM: GraduationCap,
   KIRALAMA: Wrench,
   URUN: ShoppingBag,
+  ETKINLIK: CalendarDays,
 };
 const CAT_LABEL: Record<string, string> = {
   EGITIM: "Eğitim",
   KIRALAMA: "Kiralama",
   URUN: "Ürün",
+  ETKINLIK: "Etkinlik",
 };
 const STATUS_STYLE: Record<string, string> = {
   BEKLIYOR:   "bg-yellow-100 text-yellow-700 border-yellow-200",
@@ -129,16 +131,20 @@ export default async function MusteriDetailPage({
 
   if (!student) notFound();
 
-  const totalCharged = student.hizmetler
-    .filter((h) => h.status !== "IPTAL")
-    .reduce((sum, h) => sum + h.amount, 0);
+  const rates = await getExchangeRates();
+
+  // Farklı para birimlerindeki işlemler TL'ye çevrilip toplanır.
+  const totalCharged =
+    student.hizmetler
+      .filter((h) => h.status !== "IPTAL")
+      .reduce((sum, h) => sum + toTRY(h.amount, h.currency, rates), 0) +
+    student.packagePurchases.reduce((sum, p) => sum + toTRY(p.purchasePrice, p.currency, rates), 0);
 
   const totalPaid = student.payments
     .filter((p) => p.direction === "INCOMING")
-    .reduce((sum, p) => sum + p.amount, 0);
+    .reduce((sum, p) => sum + toTRY(p.amount, p.currency, rates), 0);
 
   const netBalance = totalPaid - totalCharged;
-  const defaultCurrency = student.hizmetler[0]?.currency ?? "EUR";
 
   const lessons = student.lessons.filter(
     (l) => l.reservation.lessonType !== "EQUIPMENT_RENTAL"
@@ -194,9 +200,12 @@ export default async function MusteriDetailPage({
               <TrendingDown className="w-3.5 h-3.5 text-red-400" /> Toplam Borç
             </div>
             <p className="text-2xl font-bold text-gray-900">
-              {formatMoney(totalCharged, defaultCurrency)}
+              ₺{totalCharged.toFixed(2)}
             </p>
-            <p className="text-xs text-gray-400 mt-0.5">{student.hizmetler.filter(h => h.status !== "IPTAL").length} hizmet</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {student.hizmetler.filter(h => h.status !== "IPTAL").length} hizmet
+              {student.packagePurchases.length > 0 && `, ${student.packagePurchases.length} paket`}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -205,7 +214,7 @@ export default async function MusteriDetailPage({
               <TrendingUp className="w-3.5 h-3.5 text-green-500" /> Toplam Ödenen
             </div>
             <p className="text-2xl font-bold text-gray-900">
-              {formatMoney(totalPaid, defaultCurrency)}
+              ₺{totalPaid.toFixed(2)}
             </p>
             <p className="text-xs text-gray-400 mt-0.5">{student.payments.filter(p => p.direction === "INCOMING").length} ödeme</p>
           </CardContent>
@@ -216,7 +225,7 @@ export default async function MusteriDetailPage({
               <Wallet className="w-3.5 h-3.5" /> Net Bakiye
             </div>
             <p className={`text-2xl font-bold ${netBalance < -0.01 ? "text-red-600" : netBalance > 0.01 ? "text-blue-600" : "text-green-600"}`}>
-              {netBalance >= 0 ? "+" : ""}{formatMoney(netBalance, defaultCurrency)}
+              {netBalance >= 0 ? "+" : ""}₺{netBalance.toFixed(2)}
             </p>
             <p className="text-xs mt-0.5">
               {netBalance < -0.01 ? (
@@ -252,6 +261,20 @@ export default async function MusteriDetailPage({
               <div className="flex items-center gap-2 text-gray-600">
                 <Globe className="w-4 h-4 text-gray-400" /> {student.nationality}
                 {student.language && ` • ${student.language}`}
+              </div>
+            )}
+            {student.birthDate && (
+              <div className="flex items-center gap-2 text-gray-600">
+                <Cake className="w-4 h-4 text-gray-400" />
+                {format(new Date(student.birthDate), "d MMM yyyy", { locale: tr })}
+              </div>
+            )}
+            {(student.weight || student.gender) && (
+              <div className="flex items-center gap-2 text-gray-600">
+                <Weight className="w-4 h-4 text-gray-400" />
+                {student.weight ? `${student.weight} kg` : ""}
+                {student.weight && student.gender ? " · " : ""}
+                {student.gender ? GENDER_OPTIONS[student.gender as keyof typeof GENDER_OPTIONS] : ""}
               </div>
             )}
             {student.emergencyContact && (
@@ -296,7 +319,6 @@ export default async function MusteriDetailPage({
                 <div className="divide-y">
                   {student.hizmetler.map((h) => {
                     const Icon = CAT_ICON[h.category] ?? ConciergeBell;
-                    const symbol = CURRENCY_SYMBOLS[h.currency as keyof typeof CURRENCY_SYMBOLS] ?? h.currency;
                     return (
                       <div key={h.id} className="py-3 flex items-center gap-3">
                         <div className="p-1.5 rounded-md bg-gray-100 text-gray-500 flex-shrink-0">
@@ -324,7 +346,7 @@ export default async function MusteriDetailPage({
                         </div>
                         <div className="text-right flex-shrink-0">
                           {h.amount > 0 && (
-                            <p className="text-sm font-semibold text-gray-900">{symbol}{h.amount.toFixed(2)}</p>
+                            <p className="text-sm font-semibold text-gray-900">{formatTRY(h.amount, h.currency, rates)}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -359,7 +381,6 @@ export default async function MusteriDetailPage({
                     const pct = purchase.totalHours > 0
                       ? Math.max(0, Math.min(100, (purchase.remainingHours / purchase.totalHours) * 100))
                       : 0;
-                    const symbol = CURRENCY_SYMBOLS[purchase.currency as keyof typeof CURRENCY_SYMBOLS] ?? purchase.currency;
 
                     return (
                       <div key={purchase.id} className="py-3">
@@ -389,7 +410,7 @@ export default async function MusteriDetailPage({
                             {purchase.remainingHours.toFixed(1)} / {purchase.totalHours.toFixed(1)} saat kaldı
                           </span>
                           <span>
-                            {symbol}{purchase.purchasePrice.toFixed(2)}
+                            {formatTRY(purchase.purchasePrice, purchase.currency, rates)}
                             {purchase.expiresAt && ` · ${format(new Date(purchase.expiresAt), "d MMM yyyy", { locale: tr })}`}
                           </span>
                         </div>
@@ -415,12 +436,11 @@ export default async function MusteriDetailPage({
                   {student.payments
                     .filter((p) => p.direction === "INCOMING")
                     .map((pay) => {
-                      const symbol = CURRENCY_SYMBOLS[pay.currency as keyof typeof CURRENCY_SYMBOLS] ?? pay.currency;
                       return (
                         <div key={pay.id} className="py-2.5 flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-gray-900">
-                              {symbol}{pay.amount.toFixed(2)}
+                              {formatTRY(pay.amount, pay.currency, rates)}
                             </p>
                             <p className="text-xs text-gray-500">
                               {format(new Date(pay.recordedAt), "d MMM yyyy HH:mm", { locale: tr })}
@@ -503,7 +523,7 @@ export default async function MusteriDetailPage({
                             : "Ekipman Kiralama"}
                           {res.rentalAmount != null && (
                             <span className="text-gray-500 font-normal">
-                              {" · "}{CURRENCY_SYMBOLS[res.rentalCurrency as keyof typeof CURRENCY_SYMBOLS] ?? res.rentalCurrency}{res.rentalAmount.toFixed(2)}
+                              {" · "}{formatTRY(res.rentalAmount, res.rentalCurrency ?? "TRY", rates)}
                             </span>
                           )}
                         </p>

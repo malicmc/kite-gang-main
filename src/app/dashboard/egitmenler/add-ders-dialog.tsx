@@ -51,7 +51,7 @@ export function AddDersDialog({
   const [sablonId, setSablonId] = useState(sablonlar[0]?.id ?? "");
   const [activeFiyatIdx, setActiveFiyatIdx] = useState(0);
   const [price, setPrice] = useState(sablonlar[0]?.fiyatlar[0]?.price.toFixed(2) ?? "0");
-  const [currency, setCurrency] = useState(sablonlar[0]?.fiyatlar[0]?.currency ?? "EUR");
+  const [currency, setCurrency] = useState(sablonlar[0]?.fiyatlar[0]?.currency ?? "TRY");
   const [scheduledAt, setScheduledAt] = useState(defaultAt);
   const [instructorEarning, setInstructorEarning] = useState(hourlyRate?.toString() ?? "");
 
@@ -78,7 +78,7 @@ export function AddDersDialog({
     const first = s?.fiyatlar[0];
     setActiveFiyatIdx(0);
     setPrice((first?.price ?? 0).toFixed(2));
-    setCurrency(first?.currency ?? "EUR");
+    setCurrency(first?.currency ?? "TRY");
   }
 
   function pickFiyat(idx: number) {

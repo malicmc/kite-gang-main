@@ -1,4 +1,20 @@
-export const CURRENCIES = ["EUR", "USD", "TRY"] as const;
+export const GENDER_OPTIONS = {
+  MALE: "Erkek",
+  FEMALE: "Kadın",
+  OTHER: "Diğer",
+} as const;
+
+export const COUNTRIES = [
+  "Türkiye", "Almanya", "Fransa", "İngiltere", "İtalya", "İspanya",
+  "Hollanda", "Belçika", "İsveç", "Rusya", "ABD", "Diğer",
+];
+
+export const LANGUAGES = [
+  "Türkçe", "İngilizce", "Almanca", "Fransızca", "İspanyolca",
+  "İtalyanca", "Rusça", "Felemenkçe", "Portekizce", "Diğer",
+];
+
+export const CURRENCIES = ["TRY", "EUR", "USD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
 export const CURRENCY_SYMBOLS: Record<Currency, string> = {
@@ -12,6 +28,7 @@ export const HIZMET_CATEGORIES = {
   KIRALAMA: "Kiralama",
   URUN: "Satılabilir Ürün",
   UYELIK: "Üyelik",
+  ETKINLIK: "Etkinlik",
 } as const;
 
 export const ZAMAN_BIRIMLERI = {

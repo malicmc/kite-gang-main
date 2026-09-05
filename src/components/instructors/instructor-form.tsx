@@ -1,15 +1,18 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PAYMENT_MODELS, CURRENCIES } from "@/lib/constants";
+import { deactivateInstructor } from "@/app/actions/instructors";
 import type { InstructorFormState } from "@/app/actions/instructors";
 import type { Instructor } from "@/generated/prisma/client";
 import { useExchangeRates } from "@/hooks/use-exchange-rates";
 import { convertAmount } from "@/lib/currency";
+import { toast } from "sonner";
 
 const COLORS = [
   "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
@@ -25,13 +28,34 @@ interface InstructorFormProps {
 
 export function InstructorForm({ action, instructor, title, isNew }: InstructorFormProps) {
   const [state, formAction, isPending] = useActionState(action, {});
+  const [name, setName] = useState(instructor?.user.name ?? "");
+  const [email, setEmail] = useState(instructor?.user.email ?? "");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState(instructor?.phone ?? "");
   const [paymentModel, setPaymentModel] = useState(instructor?.paymentModel ?? "HOURLY_RATE");
   const [color, setColor] = useState(instructor?.color ?? COLORS[0]);
   const [hourlyRate, setHourlyRate] = useState(instructor?.hourlyRate?.toString() ?? "");
-  const [hourlyRateCurrency, setHourlyRateCurrency] = useState(instructor?.hourlyRateCurrency ?? "EUR");
+  const [hourlyRateCurrency, setHourlyRateCurrency] = useState(instructor?.hourlyRateCurrency ?? "TRY");
+  const [revenueShare, setRevenueShare] = useState(instructor?.revenueShare?.toString() ?? "30");
   const [monthlySalary, setMonthlySalary] = useState(instructor?.monthlySalary?.toString() ?? "");
-  const [salaryCurrency, setSalaryCurrency] = useState(instructor?.salaryCurrency ?? "EUR");
+  const [salaryCurrency, setSalaryCurrency] = useState(instructor?.salaryCurrency ?? "TRY");
+  const [isDeleting, setIsDeleting] = useState(false);
   const rates = useExchangeRates();
+  const router = useRouter();
+
+  async function handleDelete() {
+    if (!instructor) return;
+    if (!confirm(`"${instructor.user.name}" eğitmenini silmek istediğinize emin misiniz? Bu eğitmen artık listelenmeyecek ve sisteme giriş yapamayacak.`)) return;
+    setIsDeleting(true);
+    const result = await deactivateInstructor(instructor.id);
+    if (result?.error) {
+      toast.error(result.error);
+      setIsDeleting(false);
+      return;
+    }
+    toast.success("Eğitmen silindi");
+    router.push("/dashboard/egitmenler");
+  }
 
   function handleHourlyRateCurrencyChange(next: string) {
     const converted = convertAmount(Number(hourlyRate) || 0, hourlyRateCurrency, next, rates);
@@ -53,23 +77,28 @@ export function InstructorForm({ action, instructor, title, isNew }: InstructorF
           {state.error && (
             <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded">{state.error}</p>
           )}
+          {state.fieldErrors && (
+            <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded">
+              {Object.values(state.fieldErrors).flat()[0]}
+            </p>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="name">Ad Soyad *</Label>
-              <Input id="name" name="name" defaultValue={instructor?.user.name} required />
+              <Input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">E-posta *</Label>
-              <Input id="email" name="email" type="email" defaultValue={instructor?.user.email} required />
+              <Input id="email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">{isNew ? "Şifre *" : "Yeni Şifre (boş bırakın = değişmez)"}</Label>
-              <Input id="password" name="password" type="password" required={isNew} />
+              <Input id="password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required={isNew} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Telefon</Label>
-              <Input id="phone" name="phone" defaultValue={instructor?.phone ?? ""} />
+              <Input id="phone" name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
           </div>
 
@@ -127,7 +156,7 @@ export function InstructorForm({ action, instructor, title, isNew }: InstructorF
             {paymentModel === "REVENUE_SHARE" && (
               <div className="space-y-1.5">
                 <Label>Gelir Payı (%)</Label>
-                <Input name="revenueShare" type="number" step="0.5" min="0" max="100" defaultValue={instructor?.revenueShare ?? "30"} />
+                <Input name="revenueShare" type="number" step="0.5" min="0" max="100" value={revenueShare} onChange={(e) => setRevenueShare(e.target.value)} />
               </div>
             )}
 
@@ -147,7 +176,18 @@ export function InstructorForm({ action, instructor, title, isNew }: InstructorF
             )}
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className={`flex items-center pt-2 ${!isNew && instructor ? "justify-between" : "justify-end"}`}>
+            {!isNew && instructor && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-red-500 hover:bg-red-50"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Siliniyor..." : "Eğitmeni Sil"}
+              </Button>
+            )}
             <Button type="submit" disabled={isPending}>
               {isPending ? "Kaydediliyor..." : "Kaydet"}
             </Button>

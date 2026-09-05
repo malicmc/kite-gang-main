@@ -6,6 +6,8 @@ import { logAudit } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { convertAmount } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 const packageSchema = z.object({
   name: z.string().min(1, "Paket adı zorunlu"),
@@ -46,8 +48,8 @@ export async function createPackage(
   });
 
   await logAudit({ userId: user.userId, action: "CREATE", entity: "LessonPackage", newValues: parsed.data });
-  revalidatePath("/dashboard/paketler");
-  redirect("/dashboard/paketler");
+  revalidatePath("/dashboard/hizmetler/paketler");
+  redirect("/dashboard/hizmetler/paketler");
 }
 
 export async function updatePackage(
@@ -76,7 +78,7 @@ export async function updatePackage(
   });
 
   await logAudit({ userId: user.userId, action: "UPDATE", entity: "LessonPackage", entityId: id });
-  revalidatePath("/dashboard/paketler");
+  revalidatePath("/dashboard/hizmetler/paketler");
   return {};
 }
 
@@ -84,7 +86,7 @@ export async function deactivatePackage(id: string) {
   const user = await requireAdmin();
   await prisma.lessonPackage.update({ where: { id }, data: { isActive: false } });
   await logAudit({ userId: user.userId, action: "DEACTIVATE", entity: "LessonPackage", entityId: id });
-  revalidatePath("/dashboard/paketler");
+  revalidatePath("/dashboard/hizmetler/paketler");
 }
 
 // ─── SELL PACKAGE TO STUDENT ──────────────────────────────────────────────────
@@ -231,6 +233,20 @@ export async function recordPayment(
   return {};
 }
 
+// Tutarı, hedef kasa hesabının kendi para birimine çevirir. Hesap ile işlem
+// para birimi aynıysa dönüşüm yapılmaz — farklıysa güncel kur ile çevrilir
+// (örn. EUR olarak alınan bir ödeme TRY kasaya TRY olarak yansır).
+async function convertForAccount(
+  amount: number,
+  currency: string,
+  account: { currency: string }
+): Promise<{ amount: number; currency: string }> {
+  if (currency === account.currency) return { amount, currency };
+  const rates = await getExchangeRates();
+  const converted = convertAmount(amount, currency, account.currency, rates);
+  return { amount: converted, currency: account.currency };
+}
+
 async function updateCashAccount(
   accountId: string,
   amount: number,
@@ -245,12 +261,18 @@ async function updateCashAccount(
   const account = await prisma.cashAccount.findUnique({ where: { id: accountId } });
   if (!account) return;
 
+  const converted = await convertForAccount(amount, currency, account);
+  const isConverted = converted.currency !== currency;
+  const entryDescription = isConverted
+    ? `${description} (${amount.toFixed(2)} ${currency} → ${converted.amount.toFixed(2)} ${converted.currency})`
+    : description;
+
   await prisma.$transaction([
     prisma.cashAccount.update({
       where: { id: accountId },
       data: {
         balance: {
-          increment: entryType === "INCOME" ? amount : -amount,
+          increment: entryType === "INCOME" ? converted.amount : -converted.amount,
         },
       },
     }),
@@ -258,9 +280,9 @@ async function updateCashAccount(
       data: {
         accountId,
         entryType,
-        amount,
-        currency,
-        description,
+        amount: converted.amount,
+        currency: converted.currency,
+        description: entryDescription,
         paymentId,
         expenseId,
         payoutId,
@@ -270,4 +292,4 @@ async function updateCashAccount(
   ]);
 }
 
-export { updateCashAccount };
+export { updateCashAccount, convertForAccount };

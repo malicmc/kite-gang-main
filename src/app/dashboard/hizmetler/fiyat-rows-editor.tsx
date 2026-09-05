@@ -14,7 +14,7 @@ export type FiyatRow = { zamanBirimi: string; currency: string; price: string };
 export function emptyFiyatRow(category: string): FiyatRow {
   return {
     zamanBirimi: category === "KIRALAMA" ? "SAATLIK" : "SABIT",
-    currency: "EUR",
+    currency: "TRY",
     price: "0",
   };
 }

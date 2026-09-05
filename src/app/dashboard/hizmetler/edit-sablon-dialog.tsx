@@ -15,12 +15,28 @@ type Sablon = {
   id: string;
   category: string;
   name: string;
+  subCategory: string | null;
+  requiredPeople: number | null;
+  description: string | null;
+  onlineVisibility: string;
   validityDays: number | null;
   fiyatlar: { zamanBirimi: string; currency: string; price: number }[];
 };
 
-export function EditSablonDialog({ sablon }: { sablon: Sablon }) {
-  const [open, setOpen] = useState(false);
+export function EditSablonDialog({
+  sablon,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
+  showTrigger = true,
+}: {
+  sablon: Sablon;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
+}) {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = onOpenChangeProp ?? setOpenState;
   const [name, setName] = useState(sablon.name);
   const [validityDays, setValidityDays] = useState(sablon.validityDays?.toString() ?? "");
   const [rows, setRows] = useState<FiyatRow[]>(
@@ -46,16 +62,18 @@ export function EditSablonDialog({ sablon }: { sablon: Sablon }) {
 
   async function handleDelete() {
     await deleteHizmetSablonu(sablon.id);
-    toast.success("Silindi");
+    toast.success("Pasife alındı");
     router.refresh();
     setOpen(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="sm" />}>
-        <Pencil className="w-3.5 h-3.5" />
-      </DialogTrigger>
+      {showTrigger && (
+        <DialogTrigger render={<Button variant="ghost" size="sm" />}>
+          <Pencil className="w-3.5 h-3.5" />
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Hizmeti Düzenle</DialogTitle>
@@ -71,6 +89,35 @@ export function EditSablonDialog({ sablon }: { sablon: Sablon }) {
           <div className="space-y-1.5">
             <Label>Hizmet Adı *</Label>
             <Input name="name" required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Kategori</Label>
+              <Input name="subCategory" defaultValue={sablon.subCategory ?? ""} placeholder="Örn: Kitesurf" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Gerekli Kişi Sayısı</Label>
+              <Input name="requiredPeople" type="number" min="1" defaultValue={sablon.requiredPeople ?? ""} placeholder="Örn: 1" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Açıklama</Label>
+            <Input name="description" defaultValue={sablon.description ?? ""} placeholder="Kısa açıklama (opsiyonel)" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Online Uygunluk</Label>
+            <select
+              name="onlineVisibility"
+              defaultValue={sablon.onlineVisibility}
+              className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+            >
+              <option value="LISTED">Online listelenir</option>
+              <option value="PARTNER_ONLY">Yalnızca Partner Paneli</option>
+              <option value="HIDDEN">Gizli</option>
+            </select>
           </div>
 
           {sablon.category === "UYELIK" && (
@@ -91,7 +138,7 @@ export function EditSablonDialog({ sablon }: { sablon: Sablon }) {
 
           <div className="flex gap-2 justify-between">
             <Button type="button" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={handleDelete}>
-              Sil
+              Pasife Al
             </Button>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>İptal</Button>

@@ -6,8 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, Phone, Mail } from "lucide-react";
-import { PAYMENT_MODELS, CURRENCY_SYMBOLS } from "@/lib/constants";
+import { PAYMENT_MODELS } from "@/lib/constants";
 import { AddDersDialog } from "./add-ders-dialog";
+import { EgitmenlerExportButton } from "./export-button";
+import { toTRY } from "@/lib/currency";
+import { getExchangeRates } from "@/lib/exchange-rates";
 
 export default async function InstructorsPage() {
   const user = await requireAuth();
@@ -51,6 +54,8 @@ export default async function InstructorsPage() {
     }),
   ]);
 
+  const rates = await getExchangeRates();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -59,23 +64,26 @@ export default async function InstructorsPage() {
           <p className="text-gray-500 text-sm mt-1">{instructors.length} aktif eğitmen</p>
         </div>
         {user.role === "ADMIN" && (
-          <Link href="/dashboard/egitmenler/yeni">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Yeni Eğitmen
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <EgitmenlerExportButton
+              instructors={instructors.map((i) => ({ id: i.id, name: i.user.name }))}
+            />
+            <Link href="/dashboard/egitmenler/yeni">
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Yeni Eğitmen
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {instructors.map((instructor) => {
           const pendingBalance = instructor.earnings.reduce(
-            (sum, e) => sum + e.amount,
+            (sum, e) => sum + toTRY(e.amount, e.currency, rates),
             0
           );
-          const currency = instructor.earnings[0]?.currency ?? instructor.hourlyRateCurrency ?? "EUR";
-          const symbol = CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] ?? currency;
 
           return (
             <Card key={instructor.id} className="hover:shadow-md transition-shadow">
@@ -110,7 +118,7 @@ export default async function InstructorsPage() {
                   <span className="text-xs text-gray-500">{instructor._count.lessons} ders</span>
                   {user.role === "ADMIN" && pendingBalance > 0 && (
                     <Badge variant="destructive" className="text-xs">
-                      Bekleyen: {symbol}{pendingBalance.toFixed(2)}
+                      Bekleyen: ₺{pendingBalance.toFixed(2)}
                     </Badge>
                   )}
                 </div>

@@ -4,11 +4,30 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Search } from "lucide-react";
 import { createQuickStudent } from "@/app/actions/students";
 import { toast } from "sonner";
 
 type Student = { id: string; firstName: string; lastName: string };
+
+const AVATAR_COLORS = [
+  "bg-amber-100 text-amber-700",
+  "bg-blue-100 text-blue-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-violet-100 text-violet-700",
+  "bg-rose-100 text-rose-700",
+  "bg-teal-100 text-teal-700",
+];
+
+function initialsOf(first: string, last: string) {
+  return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
+}
+
+function colorFor(id: string) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
 
 export function StudentSelect({
   students,
@@ -16,7 +35,7 @@ export function StudentSelect({
   onChange,
   name = "studentId",
   required = true,
-  label = "Öğrenci *",
+  label = "Müşteri *",
   onModeChange,
 }: {
   students: Student[];
@@ -39,6 +58,9 @@ export function StudentSelect({
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [picking, setPicking] = useState(false);
+
+  const selected = localStudents.find((s) => s.id === value) ?? null;
 
   function handleSelectChange(v: string) {
     if (v === "__new__") {
@@ -46,6 +68,7 @@ export function StudentSelect({
       setError("");
     } else {
       onChange(v);
+      setPicking(false);
     }
   }
 
@@ -66,6 +89,7 @@ export function StudentSelect({
         setLocalStudents((prev) => [{ id: result.studentId!, firstName, lastName }, ...prev]);
         onChange(result.studentId);
         setShowNew(false);
+        setPicking(false);
         setFirstName("");
         setLastName("");
         setPhone("");
@@ -77,7 +101,7 @@ export function StudentSelect({
 
   if (showNew) {
     return (
-      <div className="space-y-2 border rounded-md p-3 bg-gray-50">
+      <div className="space-y-3 border rounded-xl p-4 bg-gray-50">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-1.5">
             <UserPlus className="w-3.5 h-3.5" /> Yeni Müşteri
@@ -108,22 +132,50 @@ export function StudentSelect({
     );
   }
 
+  // Seçili müşteri var ve seçim modunda değilsek: özet kart + Değiştir
+  if (selected && !picking) {
+    return (
+      <div className="space-y-1.5">
+        <Label>{label}</Label>
+        <input type="hidden" name={name} value={value} required={required} />
+        <div className="flex items-center justify-between gap-3 border rounded-xl px-3.5 py-2.5 bg-white">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${colorFor(selected.id)}`}>
+              {initialsOf(selected.firstName, selected.lastName)}
+            </div>
+            <p className="font-medium text-gray-900 truncate">{selected.firstName} {selected.lastName}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="text-xs font-medium text-blue-600 hover:underline flex-shrink-0"
+          >
+            Değiştir
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <select
-        name={name}
-        className="w-full border rounded-md px-3 py-2 text-sm bg-white"
-        required={required}
-        value={value}
-        onChange={(e) => handleSelectChange(e.target.value)}
-      >
-        <option value="">Öğrenci seçin...</option>
-        <option value="__new__">+ Yeni Müşteri Ekle</option>
-        {localStudents.map((s) => (
-          <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
-        ))}
-      </select>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <select
+          name={name}
+          className="w-full border rounded-md pl-9 pr-3 py-2 text-sm bg-white"
+          required={required}
+          value={value}
+          onChange={(e) => handleSelectChange(e.target.value)}
+        >
+          <option value="">Müşteri seçin...</option>
+          <option value="__new__">+ Yeni Müşteri Ekle</option>
+          {localStudents.map((s) => (
+            <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

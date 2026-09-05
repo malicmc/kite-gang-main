@@ -21,6 +21,7 @@ import {
   ConciergeBell,
   BarChart3,
   Sun,
+  ShoppingBag,
 } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { useState } from "react";
@@ -109,6 +110,12 @@ const navGroups: NavGroup[] = [
   {
     label: "Finans",
     items: [
+      {
+        label: "Satışlar",
+        href: "/dashboard/satislar",
+        icon: <ShoppingBag className="w-[17px] h-[17px]" />,
+        roles: ["ADMIN", "RECEPTION"],
+      },
       {
         label: "Kasa & Ödemeler",
         href: "/dashboard/kasa",

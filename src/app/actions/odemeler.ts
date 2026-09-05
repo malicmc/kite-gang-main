@@ -35,24 +35,14 @@ export async function recordMusteriOdeme(
   const parsed = odemeSchema.safeParse(raw);
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
 
-  // Bir derse bağlı ödemede eğitmen hakedişi kasaya yansımaz — sadece net tutar kasa gelirine sayılır.
-  let kasaAmount = parsed.data.amount;
-  if (parsed.data.hizmetId) {
-    const hizmet = await prisma.hizmet.findUnique({
-      where: { id: parsed.data.hizmetId },
-      select: { studentId: true, instructorEarning: true },
-    });
-    if (hizmet && hizmet.studentId === parsed.data.studentId && hizmet.instructorEarning) {
-      kasaAmount = Math.max(0, parsed.data.amount - hizmet.instructorEarning);
-    }
-  }
-
+  // Alınan ödemenin tamamı kasaya yansır. Eğitmen hakedişi ayrı bir borç olarak
+  // izlenir ve eğitmene fiilen ödeme yapıldığında (Hakediş Ödemesi Yap) kasadan düşülür.
   const payment = await prisma.payment.create({
     data: {
       studentId: parsed.data.studentId,
       hizmetId: parsed.data.hizmetId || null,
       amount: parsed.data.amount,
-      kasaAmount,
+      kasaAmount: parsed.data.amount,
       currency: parsed.data.currency,
       method: parsed.data.method,
       direction: "INCOMING",
@@ -61,11 +51,10 @@ export async function recordMusteriOdeme(
     },
   });
 
-  // Kasaya yalnızca eğitmen hakedişi düşülmüş net tutar yansır.
   if (parsed.data.cashAccountId) {
     await updateCashAccount(
       parsed.data.cashAccountId,
-      kasaAmount,
+      parsed.data.amount,
       parsed.data.currency,
       "INCOME",
       payment.id,

@@ -15,8 +15,12 @@ const fiyatRowSchema = z.object({
 });
 
 const sablonSchema = z.object({
-  category: z.enum(["EGITIM", "KIRALAMA", "URUN", "UYELIK"]),
+  category: z.enum(["EGITIM", "KIRALAMA", "URUN", "UYELIK", "ETKINLIK"]),
   name: z.string().min(1, "Ad zorunlu"),
+  subCategory: z.string().optional(),
+  requiredPeople: z.coerce.number().min(1).optional(),
+  description: z.string().optional(),
+  onlineVisibility: z.enum(["LISTED", "PARTNER_ONLY", "HIDDEN"]).default("LISTED"),
   validityDays: z.coerce.number().min(1).optional(),
   fiyatlar: z.array(fiyatRowSchema).min(1, "En az bir fiyat satırı ekleyin"),
 });
@@ -33,6 +37,10 @@ function parseSablonForm(formData: FormData) {
   return {
     category: formData.get("category") as string,
     name: formData.get("name") as string,
+    subCategory: (formData.get("subCategory") as string) || undefined,
+    requiredPeople: (formData.get("requiredPeople") as string) || undefined,
+    description: (formData.get("description") as string) || undefined,
+    onlineVisibility: (formData.get("onlineVisibility") as string) || "LISTED",
     validityDays: (formData.get("validityDays") as string) || undefined,
     fiyatlar,
   };
@@ -51,13 +59,17 @@ export async function createHizmetSablonu(
     data: {
       category: parsed.data.category,
       name: parsed.data.name,
+      subCategory: parsed.data.subCategory ?? null,
+      requiredPeople: parsed.data.requiredPeople ?? null,
+      description: parsed.data.description ?? null,
+      onlineVisibility: parsed.data.onlineVisibility,
       validityDays: parsed.data.validityDays ?? null,
       sortOrder: count + 1,
       fiyatlar: { createMany: { data: parsed.data.fiyatlar } },
     },
   });
   await logAudit({ userId: user.userId, action: "CREATE", entity: "HizmetSablonu", entityId: sablon.id });
-  revalidatePath("/dashboard/hizmetler");
+  revalidatePath("/dashboard/hizmetler", "layout");
   return {};
 }
 
@@ -76,6 +88,10 @@ export async function updateHizmetSablonu(
       data: {
         category: parsed.data.category,
         name: parsed.data.name,
+        subCategory: parsed.data.subCategory ?? null,
+        requiredPeople: parsed.data.requiredPeople ?? null,
+        description: parsed.data.description ?? null,
+        onlineVisibility: parsed.data.onlineVisibility,
         validityDays: parsed.data.validityDays ?? null,
       },
     }),
@@ -85,7 +101,7 @@ export async function updateHizmetSablonu(
     }),
   ]);
   await logAudit({ userId: user.userId, action: "UPDATE", entity: "HizmetSablonu", entityId: id });
-  revalidatePath("/dashboard/hizmetler");
+  revalidatePath("/dashboard/hizmetler", "layout");
   return {};
 }
 
@@ -93,7 +109,19 @@ export async function deleteHizmetSablonu(id: string) {
   const user = await requireAdminOrReception();
   await prisma.hizmetSablonu.update({ where: { id }, data: { isActive: false } });
   await logAudit({ userId: user.userId, action: "DEACTIVATE", entity: "HizmetSablonu", entityId: id });
-  revalidatePath("/dashboard/hizmetler");
+  revalidatePath("/dashboard/hizmetler", "layout");
+}
+
+export async function setHizmetSablonuActive(id: string, isActive: boolean) {
+  const user = await requireAdminOrReception();
+  await prisma.hizmetSablonu.update({ where: { id }, data: { isActive } });
+  await logAudit({
+    userId: user.userId,
+    action: isActive ? "ACTIVATE" : "DEACTIVATE",
+    entity: "HizmetSablonu",
+    entityId: id,
+  });
+  revalidatePath("/dashboard/hizmetler", "layout");
 }
 
 // ─── MÜŞTERİYE HİZMET ATAMA ─────────────────────────────────────────────────
@@ -101,7 +129,7 @@ export async function deleteHizmetSablonu(id: string) {
 const assignSchema = z.object({
   studentId: z.string().min(1),
   sablonId: z.string().min(1, "Hizmet seçin"),
-  category: z.enum(["EGITIM", "KIRALAMA", "URUN", "UYELIK"]),
+  category: z.enum(["EGITIM", "KIRALAMA", "URUN", "UYELIK", "ETKINLIK"]),
   title: z.string().min(1),
   instructorId: z.string().optional(),
   equipmentId: z.string().optional(),

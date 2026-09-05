@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NewReservationForm } from "./new-reservation-form";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, CalendarPlus } from "lucide-react";
 
 export default async function NewReservationPage() {
   await requireAdminOrReception();
@@ -27,14 +27,17 @@ export default async function NewReservationPage() {
   ]);
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-2xl space-y-5">
       <div className="flex items-center gap-3">
         <Link href="/dashboard/rezervasyonlar">
           <Button variant="ghost" size="sm">
             <ChevronLeft className="w-4 h-4" />
           </Button>
         </Link>
-        <h1 className="text-xl font-bold text-gray-900">Yeni Rezervasyon</h1>
+        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+          <CalendarPlus className="w-4.5 h-4.5 text-gray-700" />
+        </div>
+        <h1 className="text-xl font-bold text-gray-900">Rezervasyon Ekle</h1>
       </div>
       <NewReservationForm students={students} instructors={instructors} equipment={equipment} />
     </div>

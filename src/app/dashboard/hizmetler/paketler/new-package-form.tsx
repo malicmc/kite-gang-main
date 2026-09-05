@@ -15,7 +15,7 @@ export function NewPackageForm() {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(createPackage, {});
   const [price, setPrice] = useState("");
-  const [currency, setCurrency] = useState("EUR");
+  const [currency, setCurrency] = useState("TRY");
   const rates = useExchangeRates();
 
   function handleCurrencyChange(next: string) {

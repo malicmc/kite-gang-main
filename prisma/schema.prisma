@@ -34,10 +34,10 @@ model Instructor {
   phone              String?
   paymentModel       String  @default("HOURLY_RATE") // HOURLY_RATE | REVENUE_SHARE | SALARY_PLUS_BONUS
   hourlyRate         Float?
-  hourlyRateCurrency String  @default("EUR")
+  hourlyRateCurrency String  @default("TRY")
   revenueShare       Float?
   monthlySalary      Float?
-  salaryCurrency     String  @default("EUR")
+  salaryCurrency     String  @default("TRY")
   color              String  @default("#3B82F6")
   isActive           Boolean @default(true)
   createdAt          DateTime @default(now())
@@ -60,6 +60,9 @@ model Student {
   lastName         String
   email            String?
   phone            String?
+  birthDate        DateTime?
+  weight           Float?
+  gender           String?   // MALE | FEMALE | OTHER
   nationality      String?
   language         String?
   emergencyContact String?
@@ -91,7 +94,7 @@ model LessonPackage {
   lessonType   String   // PRIVATE | SEMI_PRIVATE | GROUP | EQUIPMENT_RENTAL | SUPERVISION
   totalHours   Float
   price        Float
-  currency     String   @default("EUR")
+  currency     String   @default("TRY")
   validityDays Int?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -111,7 +114,7 @@ model PackagePurchase {
   totalHours     Float
   remainingHours Float
   purchasePrice  Float
-  currency       String        @default("EUR")
+  currency       String        @default("TRY")
   purchasedAt    DateTime      @default(now())
   expiresAt      DateTime?
   isActive       Boolean       @default(true)
@@ -202,10 +205,11 @@ model Payment {
   hizmetId     String?
   hizmet       Hizmet?  @relation(fields: [hizmetId], references: [id])
   amount       Float
-  // Kasaya fiilen yansıyan tutar — bir derse bağlıysa eğitmen hakedişi
-  // düşülmüş nettir. Boşsa (null) amount ile aynı kabul edilir.
+  // Kasaya fiilen yansıyan tutar. Boşsa (null) amount ile aynı kabul edilir.
+  // Eski kayıtlarda (bu alan eklenmeden önce) eğitmen hakedişi düşülmüş net
+  // tutar olabilir — güncel ödeme akışında her zaman amount ile eşittir.
   kasaAmount   Float?
-  currency     String   @default("EUR")
+  currency     String   @default("TRY")
   method       String   // CASH | BANK_TRANSFER | CREDIT_CARD | OTHER
   direction    String   @default("INCOMING") // INCOMING | OUTGOING
   description  String?
@@ -227,7 +231,7 @@ model Expense {
   id           String   @id @default(cuid())
   category     String   // RENT | EQUIPMENT_PURCHASE | EQUIPMENT_REPAIR | FUEL | STAFF | FOOD | MARKETING | UTILITIES | INSURANCE | OTHER
   amount       Float
-  currency     String   @default("EUR")
+  currency     String   @default("TRY")
   method       String   // CASH | BANK_TRANSFER | CREDIT_CARD | OTHER
   description  String
   receiptUrl   String?
@@ -252,7 +256,7 @@ model InstructorEarning {
   lessonId     String     @unique
   lesson       Lesson     @relation(fields: [lessonId], references: [id])
   amount       Float
-  currency     String     @default("EUR")
+  currency     String     @default("TRY")
   hours        Float
   isPaid       Boolean    @default(false)
   createdAt    DateTime   @default(now())
@@ -267,7 +271,7 @@ model InstructorPayout {
   instructorId String
   instructor   Instructor @relation(fields: [instructorId], references: [id])
   amount       Float
-  currency     String     @default("EUR")
+  currency     String     @default("TRY")
   method       String
   periodStart  DateTime?
   periodEnd    DateTime?
@@ -288,7 +292,7 @@ model CashAccount {
   id          String   @id @default(cuid())
   name        String
   accountType String   @default("CASH") // CASH | BANK
-  currency    String   @default("EUR")
+  currency    String   @default("TRY")
   balance     Float    @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -305,7 +309,7 @@ model CashRegisterEntry {
   account      CashAccount @relation(fields: [accountId], references: [id])
   entryType    String      // INCOME | EXPENSE | TRANSFER
   amount       Float
-  currency     String      @default("EUR")
+  currency     String      @default("TRY")
   description  String
   paymentId    String?     @unique
   payment      Payment?    @relation(fields: [paymentId], references: [id])
@@ -344,14 +348,18 @@ model Equipment {
 // ─── HİZMETLER ───────────────────────────────────────────────────────────────
 
 model HizmetSablonu {
-  id           String   @id @default(cuid())
-  category     String   // EGITIM | KIRALAMA | URUN | UYELIK
-  name         String
-  validityDays Int?     // UYELIK: üyelik geçerlilik süresi (gün)
-  isActive     Boolean  @default(true)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(cuid())
+  category         String   // EGITIM | KIRALAMA | URUN | UYELIK
+  name             String
+  subCategory      String?  // Serbest metin alt kategori etiketi (ör. "Kitesurf")
+  requiredPeople   Int?     // Gerekli kişi sayısı
+  description      String?
+  onlineVisibility String   @default("LISTED") // LISTED | PARTNER_ONLY | HIDDEN
+  validityDays     Int?     // UYELIK: üyelik geçerlilik süresi (gün)
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   fiyatlar HizmetFiyat[]
 
@@ -383,7 +391,7 @@ model Hizmet {
   title                  String
   description            String?
   amount                 Float     @default(0)
-  currency               String    @default("EUR")
+  currency               String    @default("TRY")
   quantity               Int?      // URUN: satılan adet
   paymentMethod          String?
   instructorEarning      Float?
